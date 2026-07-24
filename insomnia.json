@@ -1,0 +1,410 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-07-24T11:00:00.000Z",
+  "__export_source": "insomnia.desktop:v9.0.0",
+  "resources": [
+
+    {
+      "_id": "wrk_letztech",
+      "_type": "workspace",
+      "name": "LetzTech Gateway",
+      "description": "Payment gateway — Wake connector, Admin API, Webhooks",
+      "scope": "collection"
+    },
+
+    {
+      "_id": "env_base",
+      "_type": "environment",
+      "parentId": "wrk_letztech",
+      "name": "Local (dev)",
+      "data": {
+        "base_url": "http://localhost:3000",
+        "admin_key": "FILL_ME",
+        "store_id": "FILL_ME",
+        "payment_id": "FILL_ME",
+        "wake_store_header": "FILL_ME",
+        "wake_api_key": "FILL_ME",
+        "zoop_seller_id": "a1db31b5e91d493e920369526eb99e91"
+      },
+      "color": "#4CAF50"
+    },
+
+    {
+      "_id": "env_prod",
+      "_type": "environment",
+      "parentId": "wrk_letztech",
+      "name": "Production (VPS)",
+      "data": {
+        "base_url": "http://189.90.139.194",
+        "admin_key": "FILL_ME",
+        "store_id": "FILL_ME",
+        "payment_id": "FILL_ME",
+        "wake_store_header": "FILL_ME",
+        "wake_api_key": "FILL_ME",
+        "zoop_seller_id": "a1db31b5e91d493e920369526eb99e91"
+      },
+      "color": "#F44336"
+    },
+
+    {
+      "_id": "grp_health",
+      "_type": "request_group",
+      "parentId": "wrk_letztech",
+      "name": "Health"
+    },
+    {
+      "_id": "req_healthz",
+      "_type": "request",
+      "parentId": "grp_health",
+      "name": "GET /healthz",
+      "method": "GET",
+      "url": "{{ _.base_url }}/healthz",
+      "headers": [],
+      "body": {}
+    },
+
+    {
+      "_id": "grp_admin_stores",
+      "_type": "request_group",
+      "parentId": "wrk_letztech",
+      "name": "Admin — Stores"
+    },
+    {
+      "_id": "req_create_store",
+      "_type": "request",
+      "parentId": "grp_admin_stores",
+      "name": "POST /v1/stores — Criar loja",
+      "method": "POST",
+      "url": "{{ _.base_url }}/v1/stores",
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.admin_key }}" },
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "Idempotency-Key", "value": "create-store-001" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Loja Teste Wake\"\n}"
+      }
+    },
+    {
+      "_id": "req_update_settings",
+      "_type": "request",
+      "parentId": "grp_admin_stores",
+      "name": "PATCH /v1/stores/:id/settings — Configurar seller Zoop",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/v1/stores/{{ _.store_id }}/settings",
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.admin_key }}" },
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "Idempotency-Key", "value": "update-settings-001" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"zoopSellerId\": \"{{ _.zoop_seller_id }}\",\n  \"fraudEnabled\": false,\n  \"enabledMethods\": [\"pix\", \"boleto\", \"credit_card\"]\n}"
+      }
+    },
+    {
+      "_id": "req_receivables",
+      "_type": "request",
+      "parentId": "grp_admin_stores",
+      "name": "GET /v1/stores/:id/receivables",
+      "method": "GET",
+      "url": "{{ _.base_url }}/v1/stores/{{ _.store_id }}/receivables",
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.admin_key }}" }
+      ],
+      "body": {}
+    },
+
+    {
+      "_id": "grp_admin_payments",
+      "_type": "request_group",
+      "parentId": "wrk_letztech",
+      "name": "Admin — Payments"
+    },
+    {
+      "_id": "req_list_payments",
+      "_type": "request",
+      "parentId": "grp_admin_payments",
+      "name": "GET /v1/payments — Listar",
+      "method": "GET",
+      "url": "{{ _.base_url }}/v1/payments?store_id={{ _.store_id }}&page=1&limit=20",
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.admin_key }}" }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_get_payment",
+      "_type": "request",
+      "parentId": "grp_admin_payments",
+      "name": "GET /v1/payments/:id — Detalhe",
+      "method": "GET",
+      "url": "{{ _.base_url }}/v1/payments/{{ _.payment_id }}?store_id={{ _.store_id }}",
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.admin_key }}" }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_capture_payment",
+      "_type": "request",
+      "parentId": "grp_admin_payments",
+      "name": "POST /v1/payments/:id/capture",
+      "method": "POST",
+      "url": "{{ _.base_url }}/v1/payments/{{ _.payment_id }}/capture?store_id={{ _.store_id }}",
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.admin_key }}" },
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "Idempotency-Key", "value": "capture-001" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"amount\": 10000\n}"
+      }
+    },
+    {
+      "_id": "req_cancel_payment",
+      "_type": "request",
+      "parentId": "grp_admin_payments",
+      "name": "POST /v1/payments/:id/cancel",
+      "method": "POST",
+      "url": "{{ _.base_url }}/v1/payments/{{ _.payment_id }}/cancel?store_id={{ _.store_id }}",
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.admin_key }}" },
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "Idempotency-Key", "value": "cancel-001" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{}"
+      }
+    },
+
+    {
+      "_id": "grp_wake",
+      "_type": "request_group",
+      "parentId": "wrk_letztech",
+      "name": "Wake Connector"
+    },
+    {
+      "_id": "req_wake_payment_details",
+      "_type": "request",
+      "parentId": "grp_wake",
+      "name": "POST /wake/payment-details",
+      "method": "POST",
+      "url": "{{ _.base_url }}/wake/payment-details",
+      "headers": [
+        { "name": "X-LetzTech-Store", "value": "{{ _.wake_store_header }}" },
+        { "name": "X-LetzTech-Key", "value": "{{ _.wake_api_key }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{}"
+      }
+    },
+    {
+      "_id": "req_wake_pix",
+      "_type": "request",
+      "parentId": "grp_wake",
+      "name": "POST /wake/payment — Pix",
+      "method": "POST",
+      "url": "{{ _.base_url }}/wake/payment",
+      "headers": [
+        { "name": "X-LetzTech-Store", "value": "{{ _.wake_store_header }}" },
+        { "name": "X-LetzTech-Key", "value": "{{ _.wake_api_key }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"pedido\": \"PEDIDO-001\",\n  \"id\": \"REQ-001\",\n  \"chave\": \"chave-guid-001\",\n  \"pagamento\": {\n    \"valor\": 150.00,\n    \"pix\": true\n  },\n  \"usuario\": {\n    \"nome\": \"João Silva\",\n    \"cpf\": \"12345678900\",\n    \"email\": \"joao@teste.com\",\n    \"telefone\": \"11999999999\",\n    \"ip\": \"177.0.0.1\",\n    \"endereco\": {\n      \"logradouro\": \"Rua Teste, 123\",\n      \"cidade\": \"São Paulo\",\n      \"estado\": \"SP\",\n      \"cep\": \"01310-100\",\n      \"pais\": \"BR\"\n    }\n  },\n  \"produtos\": [\n    {\n      \"sku\": \"SKU-001\",\n      \"nome\": \"Produto Teste\",\n      \"quantidade\": 1,\n      \"precoUnitario\": 150.00\n    }\n  ],\n  \"frete\": 0\n}"
+      }
+    },
+    {
+      "_id": "req_wake_boleto",
+      "_type": "request",
+      "parentId": "grp_wake",
+      "name": "POST /wake/payment — Boleto",
+      "method": "POST",
+      "url": "{{ _.base_url }}/wake/payment",
+      "headers": [
+        { "name": "X-LetzTech-Store", "value": "{{ _.wake_store_header }}" },
+        { "name": "X-LetzTech-Key", "value": "{{ _.wake_api_key }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"pedido\": \"PEDIDO-002\",\n  \"id\": \"REQ-002\",\n  \"chave\": \"chave-guid-002\",\n  \"pagamento\": {\n    \"valor\": 250.00,\n    \"boleto\": true\n  },\n  \"usuario\": {\n    \"nome\": \"Maria Souza\",\n    \"cpf\": \"98765432100\",\n    \"email\": \"maria@teste.com\",\n    \"telefone\": \"11988888888\",\n    \"ip\": \"177.0.0.2\",\n    \"endereco\": {\n      \"logradouro\": \"Av. Paulista, 1000\",\n      \"cidade\": \"São Paulo\",\n      \"estado\": \"SP\",\n      \"cep\": \"01310-100\",\n      \"pais\": \"BR\"\n    }\n  },\n  \"produtos\": [\n    {\n      \"sku\": \"SKU-002\",\n      \"nome\": \"Produto Boleto\",\n      \"quantidade\": 2,\n      \"precoUnitario\": 125.00\n    }\n  ],\n  \"frete\": 0\n}"
+      }
+    },
+    {
+      "_id": "req_wake_card",
+      "_type": "request",
+      "parentId": "grp_wake",
+      "name": "POST /wake/payment — Cartão",
+      "method": "POST",
+      "url": "{{ _.base_url }}/wake/payment",
+      "headers": [
+        { "name": "X-LetzTech-Store", "value": "{{ _.wake_store_header }}" },
+        { "name": "X-LetzTech-Key", "value": "{{ _.wake_api_key }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"pedido\": \"PEDIDO-003\",\n  \"id\": \"REQ-003\",\n  \"chave\": \"chave-guid-003\",\n  \"pagamento\": {\n    \"valor\": 500.00,\n    \"parcelas\": 2,\n    \"cartao\": {\n      \"token\": \"ZOOP_TOKEN_AQUI\",\n      \"bandeira\": \"visa\"\n    }\n  },\n  \"usuario\": {\n    \"nome\": \"Carlos Lima\",\n    \"cpf\": \"11122233344\",\n    \"email\": \"carlos@teste.com\",\n    \"telefone\": \"11977777777\",\n    \"ip\": \"177.0.0.3\",\n    \"endereco\": {\n      \"logradouro\": \"Rua Augusta, 500\",\n      \"cidade\": \"São Paulo\",\n      \"estado\": \"SP\",\n      \"cep\": \"01305-100\",\n      \"pais\": \"BR\"\n    }\n  },\n  \"produtos\": [\n    {\n      \"sku\": \"SKU-003\",\n      \"nome\": \"Produto Cartão\",\n      \"quantidade\": 1,\n      \"precoUnitario\": 500.00\n    }\n  ],\n  \"frete\": 0\n}"
+      }
+    },
+    {
+      "_id": "req_wake_authorize",
+      "_type": "request",
+      "parentId": "grp_wake",
+      "name": "POST /wake/authorize — Two-step (autorizar)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/wake/authorize",
+      "headers": [
+        { "name": "X-LetzTech-Store", "value": "{{ _.wake_store_header }}" },
+        { "name": "X-LetzTech-Key", "value": "{{ _.wake_api_key }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"pedido\": \"PEDIDO-004\",\n  \"id\": \"REQ-004\",\n  \"chave\": \"chave-guid-004\",\n  \"pagamento\": {\n    \"valor\": 300.00,\n    \"parcelas\": 1,\n    \"cartao\": {\n      \"token\": \"ZOOP_TOKEN_AQUI\",\n      \"bandeira\": \"mastercard\"\n    }\n  },\n  \"usuario\": {\n    \"nome\": \"Ana Costa\",\n    \"cpf\": \"55566677788\",\n    \"email\": \"ana@teste.com\",\n    \"telefone\": \"11966666666\"\n  },\n  \"produtos\": [\n    {\n      \"sku\": \"SKU-004\",\n      \"nome\": \"Produto Two-Step\",\n      \"quantidade\": 1,\n      \"precoUnitario\": 300.00\n    }\n  ]\n}"
+      }
+    },
+    {
+      "_id": "req_wake_capture",
+      "_type": "request",
+      "parentId": "grp_wake",
+      "name": "POST /wake/capture — Two-step (capturar)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/wake/capture",
+      "headers": [
+        { "name": "X-LetzTech-Store", "value": "{{ _.wake_store_header }}" },
+        { "name": "X-LetzTech-Key", "value": "{{ _.wake_api_key }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"transacao\": \"{{ _.payment_id }}\"\n}"
+      }
+    },
+    {
+      "_id": "req_wake_cancel",
+      "_type": "request",
+      "parentId": "grp_wake",
+      "name": "POST /wake/cancel — Cancelar/estornar",
+      "method": "POST",
+      "url": "{{ _.base_url }}/wake/cancel",
+      "headers": [
+        { "name": "X-LetzTech-Store", "value": "{{ _.wake_store_header }}" },
+        { "name": "X-LetzTech-Key", "value": "{{ _.wake_api_key }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"transacao\": \"{{ _.payment_id }}\"\n}"
+      }
+    },
+    {
+      "_id": "req_wake_chargeback",
+      "_type": "request",
+      "parentId": "grp_wake",
+      "name": "POST /wake/chargeback",
+      "method": "POST",
+      "url": "{{ _.base_url }}/wake/chargeback",
+      "headers": [
+        { "name": "X-LetzTech-Store", "value": "{{ _.wake_store_header }}" },
+        { "name": "X-LetzTech-Key", "value": "{{ _.wake_api_key }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"transacao\": \"{{ _.payment_id }}\"\n}"
+      }
+    },
+
+    {
+      "_id": "grp_webhooks",
+      "_type": "request_group",
+      "parentId": "wrk_letztech",
+      "name": "Webhooks (entrada)"
+    },
+    {
+      "_id": "req_webhook_zoop_paid",
+      "_type": "request",
+      "parentId": "grp_webhooks",
+      "name": "POST /webhooks/zoop — transaction.paid",
+      "method": "POST",
+      "url": "{{ _.base_url }}/webhooks/zoop",
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"id\": \"evt_zoop_001\",\n  \"type\": \"transaction.paid\",\n  \"payload\": {\n    \"id\": \"zoop_transaction_id_here\",\n    \"reference_id\": \"{{ _.payment_id }}\",\n    \"status\": \"succeeded\",\n    \"amount\": 15000\n  }\n}"
+      }
+    },
+    {
+      "_id": "req_webhook_zoop_authorized",
+      "_type": "request",
+      "parentId": "grp_webhooks",
+      "name": "POST /webhooks/zoop — transaction.authorized",
+      "method": "POST",
+      "url": "{{ _.base_url }}/webhooks/zoop",
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"id\": \"evt_zoop_002\",\n  \"type\": \"transaction.authorized\",\n  \"payload\": {\n    \"id\": \"zoop_transaction_id_here\",\n    \"reference_id\": \"{{ _.payment_id }}\",\n    \"status\": \"authorized\"\n  }\n}"
+      }
+    },
+    {
+      "_id": "req_webhook_zoop_failed",
+      "_type": "request",
+      "parentId": "grp_webhooks",
+      "name": "POST /webhooks/zoop — transaction.failed",
+      "method": "POST",
+      "url": "{{ _.base_url }}/webhooks/zoop",
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"id\": \"evt_zoop_003\",\n  \"type\": \"transaction.failed\",\n  \"payload\": {\n    \"id\": \"zoop_transaction_id_here\",\n    \"reference_id\": \"{{ _.payment_id }}\",\n    \"status\": \"failed\"\n  }\n}"
+      }
+    },
+    {
+      "_id": "req_webhook_koin_approved",
+      "_type": "request",
+      "parentId": "grp_webhooks",
+      "name": "POST /webhooks/koin — approved",
+      "method": "POST",
+      "url": "{{ _.base_url }}/webhooks/koin",
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"evaluation_id\": \"koin-eval-001\",\n  \"reference_id\": \"{{ _.payment_id }}\",\n  \"status\": \"approved\"\n}"
+      }
+    },
+    {
+      "_id": "req_webhook_koin_denied",
+      "_type": "request",
+      "parentId": "grp_webhooks",
+      "name": "POST /webhooks/koin — denied",
+      "method": "POST",
+      "url": "{{ _.base_url }}/webhooks/koin",
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"evaluation_id\": \"koin-eval-002\",\n  \"reference_id\": \"{{ _.payment_id }}\",\n  \"status\": \"denied\"\n}"
+      }
+    }
+  ]
+}

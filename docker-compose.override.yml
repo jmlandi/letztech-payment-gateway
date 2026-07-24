@@ -1,0 +1,9 @@
+# Local dev overrides — exposes DB ports so `npm run start:dev` on the host can reach them.
+# This file is auto-loaded by `docker compose up` locally and should NOT be deployed to the server.
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+  redis:
+    ports:
+      - "6379:6379"

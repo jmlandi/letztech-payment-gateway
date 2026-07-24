@@ -1,0 +1,24 @@
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { ZoopPaymentAdapter } from './zoop/zoop-payment.adapter';
+import { PaymentProvider } from '../domain/interfaces/payment-provider.interface';
+import { StoreSettings } from '../stores/entities/store-settings.entity';
+
+@Injectable()
+export class ProvidersService {
+  private readonly marketplaceAdapter: ZoopPaymentAdapter;
+
+  constructor(config: ConfigService) {
+    this.marketplaceAdapter = new ZoopPaymentAdapter({
+      marketplaceId: config.getOrThrow('ZOOP_MARKETPLACE_ID'),
+      apiKey: config.getOrThrow('ZOOP_API_KEY'),
+      sandbox: config.get('ZOOP_SANDBOX') !== 'false',
+      certPath: config.get('ZOOP_CERT_PATH'),
+      keyPath: config.get('ZOOP_KEY_PATH'),
+    });
+  }
+
+  getPaymentProvider(_settings: StoreSettings): PaymentProvider {
+    return this.marketplaceAdapter;
+  }
+}
