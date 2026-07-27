@@ -10,12 +10,17 @@ import {
   RefundResult,
 } from '../../domain/interfaces/payment-provider.interface';
 
-const SANDBOX_BASE = 'https://api.zoop.ws';
-const PROD_BASE = 'https://api.zoop.ws';
+// Payment/transaction endpoints moved off api.zoop.ws to a dedicated host after
+// Zoop's mTLS rollout; api.zoop.ws now only serves client-side tokenization.
+// See https://docs.zoop.co/docs/fazendo-uma-chamada
+const SANDBOX_BASE = 'https://payments.zoop.ws';
+const PROD_BASE = 'https://payments.zoop.ws';
 
 export interface ZoopAdapterOptions {
   marketplaceId: string;
   apiKey: string;
+  /** x-api-key issued by Zoop alongside the mTLS certificate — distinct from apiKey (Basic auth) */
+  xApiKey: string;
   sandbox?: boolean;
   /** Path to PEM-encoded client certificate file */
   certPath?: string;
@@ -28,7 +33,7 @@ export class ZoopPaymentAdapter implements PaymentProvider {
   private readonly http: AxiosInstance;
 
   constructor(private readonly opts: ZoopAdapterOptions) {
-    const { marketplaceId: _mid, apiKey, sandbox = true, certPath, keyPath } = opts;
+    const { marketplaceId: _mid, apiKey, xApiKey, sandbox = true, certPath, keyPath } = opts;
 
     let httpsAgent: https.Agent | undefined;
     if (certPath && keyPath) {
@@ -42,6 +47,7 @@ export class ZoopPaymentAdapter implements PaymentProvider {
     this.http = axios.create({
       baseURL: sandbox ? SANDBOX_BASE : PROD_BASE,
       auth: { username: apiKey, password: '' },
+      headers: { 'x-api-key': xApiKey },
       timeout: 20_000,
       ...(httpsAgent ? { httpsAgent } : {}),
     });

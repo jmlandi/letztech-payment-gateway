@@ -12,6 +12,7 @@ export class ProvidersService {
     this.marketplaceAdapter = new ZoopPaymentAdapter({
       marketplaceId: config.getOrThrow('ZOOP_MARKETPLACE_ID'),
       apiKey: config.getOrThrow('ZOOP_API_KEY'),
+      xApiKey: config.getOrThrow('ZOOP_X_API_KEY'),
       sandbox: config.get('ZOOP_SANDBOX') !== 'false',
       certPath: config.get('ZOOP_CERT_PATH'),
       keyPath: config.get('ZOOP_KEY_PATH'),
