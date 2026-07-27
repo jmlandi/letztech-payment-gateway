@@ -78,7 +78,7 @@ export class ZoopPaymentAdapter implements PaymentProvider {
     return {
       providerId: data.id,
       status: mapZoopStatus(data.status),
-      pixQrCode: data.payment_method?.qr_code,
+      pixQrCode: data.payment_method?.qr_code?.emv,
       pixQrCodeUrl: data.payment_method?.qr_code_url,
       pixExpiresAt: data.payment_method?.expiration_date ? new Date(data.payment_method.expiration_date) : undefined,
       raw: data,
@@ -213,7 +213,7 @@ interface ZoopTransaction {
   id: string;
   status: ZoopTxStatus;
   payment_method?: {
-    qr_code?: string;
+    qr_code?: { emv?: string };
     qr_code_url?: string;
     expiration_date?: string;
     url?: string;
