@@ -13,13 +13,15 @@ services:
       - app
 
   app:
-    image: ghcr.io/letztech/gateway:${TAG:-latest}
+    image: ghcr.io/jmlandi/letztech-gateway:${TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile
     command: node dist/main.js
     restart: unless-stopped
     env_file: .env
+    volumes:
+      - ./credentials:/app/credentials:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -32,13 +34,15 @@ services:
       retries: 3
 
   worker:
-    image: ghcr.io/letztech/gateway:${TAG:-latest}
+    image: ghcr.io/jmlandi/letztech-gateway:${TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile
     command: node dist/worker.js
     restart: unless-stopped
     env_file: .env
+    volumes:
+      - ./credentials:/app/credentials:ro
     depends_on:
       postgres:
         condition: service_healthy

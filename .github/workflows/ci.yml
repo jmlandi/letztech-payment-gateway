@@ -8,7 +8,9 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: letztech/gateway
+  IMAGE_NAME: jmlandi/letztech-gateway
+  REPO_URL: https://github.com/jmlandi/letztech-payment-gateway.git
+  DEPLOY_DIR: /opt/letztech-gateway
 
 jobs:
   lint-test:
@@ -58,8 +60,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      image_tag: ${{ steps.meta.outputs.tags }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
@@ -72,7 +72,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=sha,prefix=sha-
+            type=sha,format=long,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
       - uses: docker/build-push-action@v6
         with:
@@ -97,10 +97,37 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd /opt/letztech-gateway
-            TAG=sha-${{ github.sha }} docker compose pull app worker
-            TAG=sha-${{ github.sha }} docker compose up -d app worker
-            # Healthcheck before declaring success
-            sleep 10
-            docker compose ps --format json | grep -q '"Health":"healthy"' || \
-              (TAG=sha-$(git -C /opt/letztech-gateway log -1 HEAD~1 --format=%h) docker compose up -d app worker && exit 1)
+            set -e
+            REPO_DIR="${{ env.DEPLOY_DIR }}"
+            TAG="sha-${{ github.sha }}"
+
+            if [ ! -d "$REPO_DIR/.git" ]; then
+              git clone "${{ env.REPO_URL }}" "$REPO_DIR"
+            fi
+            cd "$REPO_DIR"
+
+            # Sync compose/Caddyfile changes from main. .env, credentials/ and
+            # .last_good_tag are gitignored, so this never touches them.
+            git fetch origin main
+            git reset --hard origin/main
+
+            PREV_TAG=$(cat .last_good_tag 2>/dev/null || echo latest)
+
+            TAG=$TAG docker compose -f docker-compose.yml pull app worker
+            TAG=$TAG docker compose -f docker-compose.yml up -d app worker
+
+            STATUS=""
+            for i in $(seq 1 12); do
+              STATUS=$(docker compose -f docker-compose.yml ps app --format json | grep -o '"Health":"[a-z]*"' | head -1)
+              echo "app health: $STATUS ($i/12)"
+              echo "$STATUS" | grep -q '"Health":"healthy"' && break
+              sleep 5
+            done
+
+            if ! echo "$STATUS" | grep -q '"Health":"healthy"'; then
+              echo "Deploy unhealthy after timeout — rolling back to $PREV_TAG"
+              TAG=$PREV_TAG docker compose -f docker-compose.yml up -d app worker
+              exit 1
+            fi
+
+            echo "$TAG" > .last_good_tag
