@@ -4,7 +4,6 @@ import { Repository } from 'typeorm';
 import { PaymentsService } from '../payments/payments.service';
 import { PaymentStatus } from '../domain/state-machine/allowed-transitions';
 import { OutboxEvent } from '../outbox/entities/outbox.entity';
-import { generateId } from '../common/utils/id';
 
 // Zoop webhook event types → payment status mapping
 const ZOOP_STATUS_MAP: Record<string, PaymentStatus | null> = {

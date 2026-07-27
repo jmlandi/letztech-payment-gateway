@@ -8,8 +8,8 @@ export class WakeController {
 
   @Post('payment-details')
   paymentDetails(
-    @Headers('x-letztech-store') store: string,
-    @Headers('x-letztech-key') key: string,
+    @Headers('x-letztech-store') _store: string,
+    @Headers('x-letztech-key') _key: string,
     @Body() _body: unknown,
   ) {
     // Returns HTML/scripts and installment options for the Wake checkout module.
@@ -23,8 +23,8 @@ export class WakeController {
 
   @Post('tokenize')
   tokenize(
-    @Headers('x-letztech-store') store: string,
-    @Headers('x-letztech-key') key: string,
+    @Headers('x-letztech-store') _store: string,
+    @Headers('x-letztech-key') _key: string,
     @Body() body: { token: string },
   ) {
     // PAN never reaches the backend — Wake calls this to relay the tokenization result.
@@ -74,9 +74,9 @@ export class WakeController {
 
   @Post('card')
   removeCard(
-    @Headers('x-letztech-store') store: string,
-    @Headers('x-letztech-key') key: string,
-    @Body() body: { token: string },
+    @Headers('x-letztech-store') _store: string,
+    @Headers('x-letztech-key') _key: string,
+    @Body() _body: { token: string },
   ) {
     // Remove saved card token (stub for v1 — Zoop token revocation)
     return { ok: true };
