@@ -94,6 +94,7 @@ export class ZoopPaymentAdapter implements PaymentProvider {
       reference_id: cmd.referenceId,
       customer: buildCustomer(cmd),
       payment_type: 'boleto',
+      boleto: { expiration_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() },
     };
     const res = await this.http.post(`/v1/marketplaces/${this.marketplaceId}/transactions`, payload);
     const data = res.data as ZoopTransaction;
