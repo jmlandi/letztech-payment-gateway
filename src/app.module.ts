@@ -16,6 +16,7 @@ import { IdempotencyKey } from './idempotency/entities/idempotency-key.entity';
 import { WebhookEndpoint } from './webhooks/entities/webhook-endpoint.entity';
 
 import { WakeModule } from './wake/wake.module';
+import { WooCommerceModule } from './woocommerce/woocommerce.module';
 import { PaymentsModule } from './payments/payments.module';
 import { StoresModule } from './stores/stores.module';
 import { RiskModule } from './risk/risk.module';
@@ -55,6 +56,7 @@ const ENTITIES = [
     }),
     ScheduleModule.forRoot(),
     WakeModule,
+    WooCommerceModule,
     PaymentsModule,
     StoresModule,
     RiskModule,

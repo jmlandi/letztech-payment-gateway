@@ -150,17 +150,33 @@ export class ZoopPaymentAdapter implements PaymentProvider {
     return { providerId: data.id, status: mapZoopStatus(data.status), raw: data };
   }
 
-  /** Checks that a seller ID exists on this marketplace — used to validate zoop_seller_id
-   * before it's saved, since Zoop only reports a bad value at charge time otherwise. */
-  async verifySeller(sellerId: string): Promise<boolean> {
+  /** Fetches a seller's record, or null if it doesn't exist on this marketplace. */
+  async getSeller(sellerId: string): Promise<ZoopSeller | null> {
     try {
-      await this.http.get(`/v1/marketplaces/${this.marketplaceId}/sellers/${sellerId}`);
-      return true;
+      const res = await this.http.get(`/v1/marketplaces/${this.marketplaceId}/sellers/${sellerId}`);
+      return res.data as ZoopSeller;
     } catch (err) {
-      if (axios.isAxiosError(err) && err.response?.status === 404) return false;
+      if (axios.isAxiosError(err) && err.response?.status === 404) return null;
       throw err;
     }
   }
+
+  /** Checks that a seller ID exists on this marketplace — used to validate zoop_seller_id
+   * before it's saved, since Zoop only reports a bad value at charge time otherwise. */
+  async verifySeller(sellerId: string): Promise<boolean> {
+    return (await this.getSeller(sellerId)) !== null;
+  }
+}
+
+export interface ZoopSeller {
+  id: string;
+  status: string;
+  type: 'individual' | 'business' | string;
+  business_name?: string;
+  first_name?: string;
+  last_name?: string;
+  statement_descriptor?: string;
+  [key: string]: unknown;
 }
 
 function buildCustomer(cmd: CreateChargeCmd): Record<string, unknown> {

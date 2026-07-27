@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ZoopPaymentAdapter } from './zoop/zoop-payment.adapter';
+import { ZoopPaymentAdapter, ZoopSeller } from './zoop/zoop-payment.adapter';
 import { PaymentProvider } from '../domain/interfaces/payment-provider.interface';
 import { StoreSettings } from '../stores/entities/store-settings.entity';
 
@@ -25,5 +25,9 @@ export class ProvidersService {
 
   verifySeller(sellerId: string): Promise<boolean> {
     return this.marketplaceAdapter.verifySeller(sellerId);
+  }
+
+  getSeller(sellerId: string): Promise<ZoopSeller | null> {
+    return this.marketplaceAdapter.getSeller(sellerId);
   }
 }

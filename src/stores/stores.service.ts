@@ -123,6 +123,52 @@ export class StoresService {
     return store;
   }
 
+  /** Finds the store already linked to this Zoop seller, or auto-provisions one from
+   * the seller's own Zoop record (name/slug derived from business_name or first+last
+   * name). Used by the WooCommerce path, where merchants already have a seller ID
+   * from Zoop but were never registered as a store in our system. */
+  async getOrCreateBySellerId(zoopSellerId: string): Promise<ResolvedStore> {
+    const existingSettings = await this.settingsRepo.findOne({ where: { zoopSellerId } });
+    if (existingSettings) {
+      const store = await this.storeRepo.findOneOrFail({ where: { id: existingSettings.storeId } });
+      return { store, settings: existingSettings };
+    }
+
+    const seller = await this.providersService.getSeller(zoopSellerId);
+    if (!seller) {
+      throw new BadRequestException({ error: { code: 'seller_not_found', message: 'zoopSellerId does not exist on the Zoop marketplace' } });
+    }
+
+    const displayName = seller.business_name
+      || [seller.first_name, seller.last_name].filter(Boolean).join(' ')
+      || seller.statement_descriptor
+      || zoopSellerId;
+
+    let name = displayName;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const { store } = await this.createStore(name, name, zoopSellerId);
+        const settings = await this.settingsRepo.findOneOrFail({ where: { storeId: store.id } });
+        return { store, settings };
+      } catch (err) {
+        if (!(err instanceof ConflictException)) throw err;
+
+        // Another concurrent request may have just created this exact store —
+        // check by seller ID again before assuming it's an unrelated name clash.
+        const raceSettings = await this.settingsRepo.findOne({ where: { zoopSellerId } });
+        if (raceSettings) {
+          const store = await this.storeRepo.findOneOrFail({ where: { id: raceSettings.storeId } });
+          return { store, settings: raceSettings };
+        }
+
+        // Genuine name/slug clash with an unrelated store — disambiguate and retry once.
+        name = `${displayName} - ${zoopSellerId.slice(0, 8)}`;
+      }
+    }
+
+    throw new ConflictException({ error: { code: 'store_provisioning_failed', message: 'Could not auto-provision a store for this seller' } });
+  }
+
   async updateSlug(storeId: string, slug: string): Promise<Store> {
     const store = await this.findById(storeId);
     const wakeStoreHeader = slugify(slug);
