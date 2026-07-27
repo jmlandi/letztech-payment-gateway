@@ -115,7 +115,7 @@ export class ZoopPaymentAdapter implements PaymentProvider {
       description: cmd.description ?? 'Pagamento',
       reference_id: cmd.referenceId,
       payment_type: 'credit',
-      source: { token_id: cmd.token, usage: 'single_use' },
+      source: { token_id: cmd.token, usage: 'single_use', currency: cmd.amount.currency },
       capture: cmd.capture !== false,
       installment_plan: cmd.installments && cmd.installments > 1
         ? { mode: 'with_interest', number_installments: cmd.installments }
