@@ -7,7 +7,7 @@ export class Store {
   @PrimaryColumn({ length: 26 })
   id: string;
 
-  @Column({ length: 255 })
+  @Column({ length: 255, unique: true })
   name: string;
 
   @Column({ name: 'wake_store_header', type: 'varchar', length: 255, unique: true, nullable: true })
