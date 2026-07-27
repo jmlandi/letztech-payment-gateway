@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
 import { Store } from './store.entity';
 
 @Entity('store_credentials')
@@ -22,5 +22,6 @@ export class StoreCredentials {
   revokedAt: Date | null;
 
   @ManyToOne(() => Store, (s) => s.credentials)
+  @JoinColumn({ name: 'store_id' })
   store: Store;
 }

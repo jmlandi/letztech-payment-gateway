@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 import { Payment } from './payment.entity';
 
 @Entity('provider_charges')
@@ -38,5 +38,6 @@ export class ProviderCharge {
   updatedAt: Date;
 
   @ManyToOne(() => Payment, (p: Payment) => p.providerCharges)
+  @JoinColumn({ name: 'payment_id' })
   payment: Payment;
 }

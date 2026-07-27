@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
 import { Payment } from './payment.entity';
 
 @Entity('payment_events')
@@ -33,5 +33,6 @@ export class PaymentEvent {
   createdAt: Date;
 
   @ManyToOne(() => Payment, (p: Payment) => p.events)
+  @JoinColumn({ name: 'payment_id' })
   payment: Payment;
 }
