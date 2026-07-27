@@ -52,8 +52,13 @@ export class AdminController {
   // --- Stores ---
 
   @Post('stores')
-  createStore(@Body() body: { name: string }) {
-    return this.storesService.createStore(body.name);
+  createStore(@Body() body: { name: string; slug: string }) {
+    return this.storesService.createStore(body.name, body.slug);
+  }
+
+  @Patch('stores/:id/slug')
+  updateSlug(@Param('id') id: string, @Body() body: { slug: string }) {
+    return this.storesService.updateSlug(id, body.slug);
   }
 
   @Patch('stores/:id/settings')

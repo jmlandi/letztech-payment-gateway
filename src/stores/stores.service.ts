@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as argon2 from 'argon2';
@@ -6,6 +6,7 @@ import { Store } from './entities/store.entity';
 import { StoreCredentials } from './entities/store-credentials.entity';
 import { StoreSettings } from './entities/store-settings.entity';
 import { generateId } from '../common/utils/id';
+import { slugify } from '../common/utils/slug';
 
 export interface ResolvedStore {
   store: Store;
@@ -49,8 +50,30 @@ export class StoresService {
     throw new UnauthorizedException({ error: { code: 'unauthorized', message: 'Invalid API key' } });
   }
 
-  async createStore(name: string): Promise<{ store: Store; apiKey: string; hmacSecret: string }> {
-    const store = this.storeRepo.create({ id: generateId('str'), name, wakeStoreHeader: null });
+  private async assertSlugAvailable(slug: string, excludeStoreId?: string): Promise<void> {
+    const existing = await this.storeRepo.findOne({ where: { wakeStoreHeader: slug } });
+    if (existing && existing.id !== excludeStoreId) {
+      throw new ConflictException({ error: { code: 'slug_taken', message: 'A store with this slug already exists' } });
+    }
+  }
+
+  private async assertNameAvailable(name: string, excludeStoreId?: string): Promise<void> {
+    const existing = await this.storeRepo.findOne({ where: { name } });
+    if (existing && existing.id !== excludeStoreId) {
+      throw new ConflictException({ error: { code: 'name_taken', message: 'A store with this name already exists' } });
+    }
+  }
+
+  async createStore(name: string, slug: string): Promise<{ store: Store; apiKey: string; hmacSecret: string }> {
+    const wakeStoreHeader = slugify(slug);
+    if (!wakeStoreHeader) {
+      throw new ConflictException({ error: { code: 'invalid_slug', message: 'Slug must contain at least one alphanumeric character' } });
+    }
+
+    await this.assertNameAvailable(name);
+    await this.assertSlugAvailable(wakeStoreHeader);
+
+    const store = this.storeRepo.create({ id: generateId('str'), name, wakeStoreHeader });
     await this.storeRepo.save(store);
 
     const apiKey = generateId('key');
@@ -87,5 +110,18 @@ export class StoresService {
     const store = await this.storeRepo.findOne({ where: { id } });
     if (!store) throw new NotFoundException({ error: { code: 'not_found', message: 'Store not found' } });
     return store;
+  }
+
+  async updateSlug(storeId: string, slug: string): Promise<Store> {
+    const store = await this.findById(storeId);
+    const wakeStoreHeader = slugify(slug);
+    if (!wakeStoreHeader) {
+      throw new ConflictException({ error: { code: 'invalid_slug', message: 'Slug must contain at least one alphanumeric character' } });
+    }
+
+    await this.assertSlugAvailable(wakeStoreHeader, storeId);
+
+    store.wakeStoreHeader = wakeStoreHeader;
+    return this.storeRepo.save(store);
   }
 }
