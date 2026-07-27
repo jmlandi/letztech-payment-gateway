@@ -138,6 +138,14 @@ export class PaymentsService {
     return payment;
   }
 
+  /** Used to recover from a retry landing after the idempotency record was created
+   * but before its response was saved (crash/timeout mid-request) -- lets a handler
+   * return the payment's current state instead of re-creating it and hitting the
+   * (store_id, external_ref) unique constraint. */
+  async findByExternalRef(storeId: string, externalRef: string): Promise<Payment | null> {
+    return this.paymentRepo.findOne({ where: { storeId, externalRef } });
+  }
+
   async findAll(storeId: string, filters: { status?: string; from?: string; to?: string; page?: number; limit?: number }): Promise<{ data: Payment[]; total: number }> {
     const qb = this.paymentRepo.createQueryBuilder('p').where('p.store_id = :storeId', { storeId });
     if (filters.status) qb.andWhere('p.status = :status', { status: filters.status });

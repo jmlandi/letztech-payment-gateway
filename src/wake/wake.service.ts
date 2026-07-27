@@ -6,6 +6,7 @@ import { RiskService } from '../risk/risk.service';
 import { ProvidersService } from '../providers/providers.service';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { PaymentStatus } from '../domain/state-machine/allowed-transitions';
+import { Payment } from '../payments/entities/payment.entity';
 import { createHash } from 'crypto';
 
 // Raw Wake payload shapes (simplified — real payloads follow wakecommerce.readme.io)
@@ -89,8 +90,19 @@ export class WakeService {
       requestHash,
     );
 
-    if (existing && record.response) {
-      return record.response as unknown as WakePaymentResponse;
+    if (existing) {
+      if (record.response) {
+        return record.response as unknown as WakePaymentResponse;
+      }
+      // Idempotency record exists but no response was saved -- a previous attempt
+      // crashed or timed out mid-request. If a payment was already created for this
+      // key, a charge may be in flight or done; return its current state instead of
+      // re-creating it (would otherwise hit the (store_id, external_ref) unique
+      // constraint) and never re-call the provider (would risk double-charging).
+      const existingPayment = await this.paymentsService.findByExternalRef(store.id, idempotencyKey);
+      if (existingPayment) {
+        return buildResponseFromExistingPayment(existingPayment);
+      }
     }
 
     const method = resolveMethod(payload);
@@ -276,6 +288,30 @@ export class WakeService {
     await this.paymentsService.transition(payload.transacao, store.id, PaymentStatus.CHARGEBACK, 'wake_chargeback');
     return { ok: true };
   }
+}
+
+function buildResponseFromExistingPayment(payment: Payment): WakePaymentResponse {
+  if (payment.status === PaymentStatus.REFUSED || payment.status === PaymentStatus.CANCELLED || payment.status === PaymentStatus.EXPIRED) {
+    return { statusId: 2, mensagem: 'Pagamento não autorizado', transacao: payment.id };
+  }
+  if (payment.pixQrCode) {
+    return {
+      statusId: 7,
+      transacao: payment.id,
+      pix: { qrCode: payment.pixQrCode, qrCodeUrl: payment.pixQrCodeUrl ?? '', expiresAt: (payment.pixExpiresAt ?? new Date()).toISOString() },
+    };
+  }
+  if (payment.boletoUrl) {
+    return {
+      statusId: 7,
+      transacao: payment.id,
+      boleto: { url: payment.boletoUrl, barcode: payment.boletoBarcode ?? '', expiresAt: (payment.boletoExpiresAt ?? new Date()).toISOString() },
+    };
+  }
+  if (payment.status === PaymentStatus.UNDER_REVIEW || payment.status === PaymentStatus.CREATED || payment.status === PaymentStatus.APPROVED_RISK) {
+    return { statusId: 7, mensagem: 'Pagamento em análise', transacao: payment.id };
+  }
+  return { statusId: 1, transacao: payment.id };
 }
 
 function resolveMethod(payload: WakePaymentPayload): string {

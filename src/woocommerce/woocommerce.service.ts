@@ -69,8 +69,19 @@ export class WooCommerceService {
     const requestHash = createHash('sha256').update(rawBody).digest('hex');
 
     const { existing, record } = await this.idempotencyService.getOrCreate(store.id, idempotencyKey, requestHash);
-    if (existing && record.response) {
-      return record.response as unknown as WooCommercePaymentResponse;
+    if (existing) {
+      if (record.response) {
+        return record.response as unknown as WooCommercePaymentResponse;
+      }
+      // Idempotency record exists but no response was saved -- a previous attempt
+      // crashed or timed out mid-request. If a payment was already created for this
+      // key, a charge may be in flight or done; return its current state instead of
+      // re-creating it (would otherwise hit the (store_id, external_ref) unique
+      // constraint) and never re-call the provider (would risk double-charging).
+      const existingPayment = await this.paymentsService.findByExternalRef(store.id, idempotencyKey);
+      if (existingPayment) {
+        return { idTransacao: existingPayment.id, status: existingPayment.status };
+      }
     }
 
     const amountInCents = Math.round(payload.amount * 100);
