@@ -57,8 +57,8 @@ export class ZoopPaymentAdapter implements PaymentProvider {
 
   private async createPixCharge(cmd: CreateChargeCmd): Promise<ChargeResult> {
     const payload = {
-      amount: cmd.amount,
-      currency: cmd.amount.toString(),
+      amount: cmd.amount.amount,
+      currency: cmd.amount.currency,
       description: cmd.description ?? 'Pagamento',
       reference_id: cmd.referenceId,
       customer: buildCustomer(cmd),
@@ -79,8 +79,8 @@ export class ZoopPaymentAdapter implements PaymentProvider {
 
   private async createBoletoCharge(cmd: CreateChargeCmd): Promise<ChargeResult> {
     const payload = {
-      amount: cmd.amount,
-      currency: 'BRL',
+      amount: cmd.amount.amount,
+      currency: cmd.amount.currency,
       description: cmd.description ?? 'Pagamento',
       reference_id: cmd.referenceId,
       customer: buildCustomer(cmd),
@@ -100,8 +100,8 @@ export class ZoopPaymentAdapter implements PaymentProvider {
 
   private async createCardCharge(cmd: CreateChargeCmd): Promise<ChargeResult> {
     const payload = {
-      amount: cmd.amount,
-      currency: 'BRL',
+      amount: cmd.amount.amount,
+      currency: cmd.amount.currency,
       description: cmd.description ?? 'Pagamento',
       reference_id: cmd.referenceId,
       payment_type: 'credit',
