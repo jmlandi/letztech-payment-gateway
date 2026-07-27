@@ -112,6 +112,12 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
+            # caddy/ is bind-mounted as a directory (not a single file), so this
+            # reload always sees the current on-disk Caddyfile — a single-file
+            # bind mount binds the old inode after `git reset --hard` replaces it.
+            docker compose -f docker-compose.yml up -d caddy
+            docker compose -f docker-compose.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+
             PREV_TAG=$(cat .last_good_tag 2>/dev/null || echo latest)
 
             TAG=$TAG docker compose -f docker-compose.yml pull app worker
