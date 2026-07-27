@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as argon2 from 'argon2';
@@ -7,6 +7,7 @@ import { StoreCredentials } from './entities/store-credentials.entity';
 import { StoreSettings } from './entities/store-settings.entity';
 import { generateId } from '../common/utils/id';
 import { slugify } from '../common/utils/slug';
+import { ProvidersService } from '../providers/providers.service';
 
 export interface ResolvedStore {
   store: Store;
@@ -19,6 +20,7 @@ export class StoresService {
     @InjectRepository(Store) private readonly storeRepo: Repository<Store>,
     @InjectRepository(StoreCredentials) private readonly credsRepo: Repository<StoreCredentials>,
     @InjectRepository(StoreSettings) private readonly settingsRepo: Repository<StoreSettings>,
+    private readonly providersService: ProvidersService,
   ) {}
 
   async resolveByWakeHeaders(wakeStoreHeader: string, apiKey: string): Promise<ResolvedStore> {
@@ -64,7 +66,14 @@ export class StoresService {
     }
   }
 
-  async createStore(name: string, slug: string): Promise<{ store: Store; apiKey: string; hmacSecret: string }> {
+  private async assertSellerExists(zoopSellerId: string): Promise<void> {
+    const exists = await this.providersService.verifySeller(zoopSellerId);
+    if (!exists) {
+      throw new BadRequestException({ error: { code: 'seller_not_found', message: 'zoopSellerId does not exist on the Zoop marketplace' } });
+    }
+  }
+
+  async createStore(name: string, slug: string, zoopSellerId?: string): Promise<{ store: Store; apiKey: string; hmacSecret: string }> {
     const wakeStoreHeader = slugify(slug);
     if (!wakeStoreHeader) {
       throw new ConflictException({ error: { code: 'invalid_slug', message: 'Slug must contain at least one alphanumeric character' } });
@@ -72,6 +81,7 @@ export class StoresService {
 
     await this.assertNameAvailable(name);
     await this.assertSlugAvailable(wakeStoreHeader);
+    if (zoopSellerId) await this.assertSellerExists(zoopSellerId);
 
     const store = this.storeRepo.create({ id: generateId('str'), name, wakeStoreHeader });
     await this.storeRepo.save(store);
@@ -92,7 +102,7 @@ export class StoresService {
       storeId: store.id,
       fraudEnabled: false,
       koinPrivateKeyEncrypted: null,
-      zoopSellerId: null,
+      zoopSellerId: zoopSellerId ?? null,
       enabledMethods: ['pix', 'boleto', 'credit_card'],
     });
     await this.settingsRepo.save(settings);
@@ -102,6 +112,7 @@ export class StoresService {
 
   async updateSettings(storeId: string, patch: Partial<Pick<StoreSettings, 'fraudEnabled' | 'koinPrivateKeyEncrypted' | 'zoopSellerId' | 'enabledMethods'>>): Promise<StoreSettings> {
     const settings = await this.settingsRepo.findOneOrFail({ where: { storeId } });
+    if (patch.zoopSellerId) await this.assertSellerExists(patch.zoopSellerId);
     Object.assign(settings, patch);
     return this.settingsRepo.save(settings);
   }

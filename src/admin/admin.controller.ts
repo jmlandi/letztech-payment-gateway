@@ -52,8 +52,8 @@ export class AdminController {
   // --- Stores ---
 
   @Post('stores')
-  createStore(@Body() body: { name: string; slug: string }) {
-    return this.storesService.createStore(body.name, body.slug);
+  createStore(@Body() body: { name: string; slug: string; zoopSellerId?: string }) {
+    return this.storesService.createStore(body.name, body.slug, body.zoopSellerId);
   }
 
   @Patch('stores/:id/slug')

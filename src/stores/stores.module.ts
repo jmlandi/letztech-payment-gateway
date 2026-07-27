@@ -4,9 +4,10 @@ import { Store } from './entities/store.entity';
 import { StoreCredentials } from './entities/store-credentials.entity';
 import { StoreSettings } from './entities/store-settings.entity';
 import { StoresService } from './stores.service';
+import { ProvidersModule } from '../providers/providers.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Store, StoreCredentials, StoreSettings])],
+  imports: [TypeOrmModule.forFeature([Store, StoreCredentials, StoreSettings]), ProvidersModule],
   providers: [StoresService],
   exports: [StoresService],
 })

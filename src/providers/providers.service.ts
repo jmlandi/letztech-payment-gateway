@@ -22,4 +22,8 @@ export class ProvidersService {
   getPaymentProvider(_settings: StoreSettings): PaymentProvider {
     return this.marketplaceAdapter;
   }
+
+  verifySeller(sellerId: string): Promise<boolean> {
+    return this.marketplaceAdapter.verifySeller(sellerId);
+  }
 }

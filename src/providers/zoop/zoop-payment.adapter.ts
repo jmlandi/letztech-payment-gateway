@@ -149,6 +149,18 @@ export class ZoopPaymentAdapter implements PaymentProvider {
     const data = res.data as ZoopTransaction;
     return { providerId: data.id, status: mapZoopStatus(data.status), raw: data };
   }
+
+  /** Checks that a seller ID exists on this marketplace — used to validate zoop_seller_id
+   * before it's saved, since Zoop only reports a bad value at charge time otherwise. */
+  async verifySeller(sellerId: string): Promise<boolean> {
+    try {
+      await this.http.get(`/v1/marketplaces/${this.marketplaceId}/sellers/${sellerId}`);
+      return true;
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 404) return false;
+      throw err;
+    }
+  }
 }
 
 function buildCustomer(cmd: CreateChargeCmd): Record<string, unknown> {
