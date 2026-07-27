@@ -18,8 +18,9 @@ const PROD_BASE = 'https://payments.zoop.ws';
 
 export interface ZoopAdapterOptions {
   marketplaceId: string;
-  apiKey: string;
-  /** x-api-key issued by Zoop alongside the mTLS certificate — distinct from apiKey (Basic auth) */
+  /** Publishable Key (ZPK) — goes in Authorization: Basic for mTLS-authenticated calls */
+  publishableKey: string;
+  /** x-api-key issued by Zoop alongside the mTLS certificate — infra-level rate-limit identification, not a business credential */
   xApiKey: string;
   sandbox?: boolean;
   /** Path to PEM-encoded client certificate file */
@@ -33,7 +34,7 @@ export class ZoopPaymentAdapter implements PaymentProvider {
   private readonly http: AxiosInstance;
 
   constructor(private readonly opts: ZoopAdapterOptions) {
-    const { marketplaceId: _mid, apiKey, xApiKey, sandbox = true, certPath, keyPath } = opts;
+    const { marketplaceId: _mid, publishableKey, xApiKey, sandbox = true, certPath, keyPath } = opts;
 
     let httpsAgent: https.Agent | undefined;
     if (certPath && keyPath) {
@@ -46,7 +47,7 @@ export class ZoopPaymentAdapter implements PaymentProvider {
 
     this.http = axios.create({
       baseURL: sandbox ? SANDBOX_BASE : PROD_BASE,
-      auth: { username: apiKey, password: '' },
+      auth: { username: publishableKey, password: '' },
       headers: { 'x-api-key': xApiKey },
       timeout: 20_000,
       ...(httpsAgent ? { httpsAgent } : {}),
@@ -63,6 +64,7 @@ export class ZoopPaymentAdapter implements PaymentProvider {
 
   private async createPixCharge(cmd: CreateChargeCmd): Promise<ChargeResult> {
     const payload = {
+      on_behalf_of: cmd.sellerId,
       amount: cmd.amount.amount,
       currency: cmd.amount.currency,
       description: cmd.description ?? 'Pagamento',
@@ -85,6 +87,7 @@ export class ZoopPaymentAdapter implements PaymentProvider {
 
   private async createBoletoCharge(cmd: CreateChargeCmd): Promise<ChargeResult> {
     const payload = {
+      on_behalf_of: cmd.sellerId,
       amount: cmd.amount.amount,
       currency: cmd.amount.currency,
       description: cmd.description ?? 'Pagamento',
@@ -106,6 +109,7 @@ export class ZoopPaymentAdapter implements PaymentProvider {
 
   private async createCardCharge(cmd: CreateChargeCmd): Promise<ChargeResult> {
     const payload = {
+      on_behalf_of: cmd.sellerId,
       amount: cmd.amount.amount,
       currency: cmd.amount.currency,
       description: cmd.description ?? 'Pagamento',
