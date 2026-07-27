@@ -1,12 +1,7 @@
-pay.letztech.com.br {
+pay.letstech.com.br {
   reverse_proxy app:3000
 }
 
-api.letztech.com.br {
-  reverse_proxy app:3000
-}
-
-# Responds to raw IP access — useful for health checks before DNS is set up
-:80 {
+api.letstech.com.br {
   reverse_proxy app:3000
 }
