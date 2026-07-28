@@ -6,8 +6,13 @@ import { isSensitiveKey } from '../utils/redact';
 
 const logger = new Logger('HTTP');
 
-/** Health checks would otherwise dominate the log volume with no signal. */
-const QUIET_PATHS = new Set(['/health', '/health/live', '/health/ready']);
+/**
+ * Successful health probes are not logged: Docker polls `/healthz` every 15s
+ * on both the app and worker containers, which would bury real traffic under
+ * thousands of empty lines a day. A failing probe still logs — that is signal.
+ * Must match HealthController's route (`@Controller('healthz')`).
+ */
+const QUIET_PATHS = new Set(['/healthz']);
 
 /** Query values are logged by key only when the key is not sensitive. */
 function summarizeQuery(query: Request['query']): Record<string, unknown> | undefined {
