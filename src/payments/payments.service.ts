@@ -133,6 +133,43 @@ export class PaymentsService {
     return saved;
   }
 
+  /**
+   * Persists a fraud verdict so it shows up in risk review afterwards.
+   *
+   * Non-fatal on purpose: this is an audit record, and failing to write it
+   * must never refuse a payment the provider already approved. A failure is
+   * logged at error level instead of propagating.
+   *
+   * Noop verdicts are recorded too — knowing a charge was never screened is
+   * itself the finding when a store still has fraudEnabled=false.
+   */
+  async recordFraudEvaluation(params: {
+    paymentId: string;
+    storeId: string;
+    provider: string;
+    type: 'pre_evaluation' | 'evaluation';
+    verdict: { status: string; score: number; evaluationId?: string; raw: unknown };
+  }): Promise<void> {
+    try {
+      await this.saveFraudEvaluation({
+        paymentId: params.paymentId,
+        storeId: params.storeId,
+        provider: params.provider,
+        referenceId: params.paymentId,
+        evaluationId: params.verdict.evaluationId ?? null,
+        type: params.type,
+        status: params.verdict.status,
+        score: params.verdict.score ?? null,
+        raw: params.verdict.raw ?? null,
+      });
+    } catch (err) {
+      this.logger.error(
+        { paymentId: params.paymentId, storeId: params.storeId, provider: params.provider, type: params.type, err },
+        'Failed to persist fraud evaluation (payment flow continues)',
+      );
+    }
+  }
+
   async saveProviderCharge(data: Omit<ProviderCharge, 'id' | 'createdAt' | 'updatedAt' | 'payment'>): Promise<ProviderCharge> {
     const record = this.chargeRepo.create({ id: generateId('chg'), ...data });
     return this.chargeRepo.save(record);
@@ -226,7 +263,10 @@ export class PaymentsService {
 
     const limit = Math.min(filters.limit ?? 20, 100);
     const page = filters.page ?? 1;
-    qb.take(limit).skip((page - 1) * limit).orderBy('fe.created_at', 'DESC');
+    // Must be the entity property (createdAt), not the column (created_at):
+    // take/skip over a join makes TypeORM resolve the sort against property
+    // metadata, and a column name there throws at runtime.
+    qb.take(limit).skip((page - 1) * limit).orderBy('fe.createdAt', 'DESC');
 
     const [data, total] = await qb.getManyAndCount();
     return { data: data as Array<FraudEvaluation & { payment: Payment }>, total };

@@ -14,11 +14,24 @@ export class RiskService {
     this.sandbox = config.get<string>('KOIN_SANDBOX') !== 'false';
   }
 
+  /** Single source of truth for whether a store actually reaches Koin. */
+  private usesKoin(settings: StoreSettings): boolean {
+    return Boolean(settings.fraudEnabled && settings.koinPrivateKeyEncrypted);
+  }
+
+  /**
+   * Which provider handled an evaluation, for the persisted audit record.
+   * Derived without decrypting the store's key, unlike `getProvider`.
+   */
+  providerName(settings: StoreSettings): string {
+    return this.usesKoin(settings) ? 'koin' : 'noop';
+  }
+
   getProvider(settings: StoreSettings): FraudProvider {
-    if (!settings.fraudEnabled || !settings.koinPrivateKeyEncrypted) {
+    if (!this.usesKoin(settings)) {
       return new NoopFraudProvider();
     }
-    const decrypted = this.decryptKoinKey(settings.koinPrivateKeyEncrypted);
+    const decrypted = this.decryptKoinKey(settings.koinPrivateKeyEncrypted as string);
     return new KoinFraudAdapter(decrypted, this.sandbox);
   }
 
