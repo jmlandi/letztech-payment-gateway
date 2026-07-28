@@ -3,7 +3,7 @@ import { PaymentsService } from '../payments/payments.service';
 import { StoresService } from '../stores/stores.service';
 import { StoreSettings } from '../stores/entities/store-settings.entity';
 import { AdminGuard } from './admin.guard';
-import { maskCustomer } from '../common/utils/mask-pii';
+import { maskDocument, maskEmail, maskName, maskCustomer } from '../common/utils/mask-pii';
 
 @Controller('v1')
 @UseGuards(AdminGuard)
@@ -98,6 +98,49 @@ export class AdminController {
         // PII is always masked — raw customer data never leaves the DB here.
         customer: maskCustomer(fe.payment.customer),
       })),
+    };
+  }
+
+  @Get('risk/declined-attempts')
+  async listDeclinedAttempts(
+    @Query('store_id') storeId?: string,
+    @Query('method') method?: string,
+    @Query('since') since?: string,
+    @Query('min_refused') minRefused?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const clusters = await this.paymentsService.findDeclinedAttemptClusters({
+      storeId,
+      method,
+      since,
+      minRefused: minRefused !== undefined ? parseInt(minRefused, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+
+    return {
+      total: clusters.length,
+      data: clusters.map((c) => {
+        const spanMinutes = Math.round(
+          (new Date(c.lastAt).getTime() - new Date(c.firstAt).getTime()) / 60000,
+        );
+        return {
+          // Masked like everywhere else — enough to recognise a repeat
+          // offender and pivot to the payment ids, never the raw identity.
+          document: maskDocument(c.document),
+          name: maskName(c.name),
+          email: maskEmail(c.email),
+          attempts: c.attempts,
+          refused: c.refused,
+          refusalRate: c.attempts ? Math.round((c.refused / c.attempts) * 100) : 0,
+          distinctAmounts: c.distinctAmounts,
+          minAmount: c.minAmount,
+          maxAmount: c.maxAmount,
+          firstAt: c.firstAt,
+          lastAt: c.lastAt,
+          spanMinutes,
+          samplePaymentIds: c.samplePaymentIds,
+        };
+      }),
     };
   }
 

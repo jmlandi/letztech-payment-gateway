@@ -231,4 +231,67 @@ export class PaymentsService {
     const [data, total] = await qb.getManyAndCount();
     return { data: data as Array<FraudEvaluation & { payment: Payment }>, total };
   }
+
+  /**
+   * Card-testing view: charge attempts clustered by customer document.
+   *
+   * Reads `payments` rather than `fraud_evaluations` on purpose — a store with
+   * `fraudEnabled: false` (the default, and what WooCommerce auto-provisioning
+   * creates) never reaches Koin, so a fraud run leaves no evaluation behind but
+   * always leaves payment rows. Repeated attempts on one document with most of
+   * them refused is the signature of someone walking a list of stolen cards.
+   *
+   * Aggregate only: no raw payload, and the caller masks the identity fields.
+   */
+  async findDeclinedAttemptClusters(filters: {
+    storeId?: string;
+    method?: string;
+    since?: string;
+    minRefused?: number;
+    limit?: number;
+  }): Promise<DeclinedAttemptCluster[]> {
+    const since = filters.since ?? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const minRefused = filters.minRefused ?? 2;
+    const limit = Math.min(filters.limit ?? 25, 100);
+
+    const qb = this.paymentRepo
+      .createQueryBuilder('p')
+      .select("p.customer->>'document'", 'document')
+      .addSelect("MIN(p.customer->>'name')", 'name')
+      .addSelect("MIN(p.customer->>'email')", 'email')
+      .addSelect('COUNT(*)::int', 'attempts')
+      .addSelect("COUNT(*) FILTER (WHERE p.status = 'refused')::int", 'refused')
+      .addSelect('COUNT(DISTINCT p.amount)::int', 'distinctAmounts')
+      .addSelect('MIN(p.amount)::int', 'minAmount')
+      .addSelect('MAX(p.amount)::int', 'maxAmount')
+      .addSelect('MIN(p.created_at)', 'firstAt')
+      .addSelect('MAX(p.created_at)', 'lastAt')
+      .addSelect('(ARRAY_AGG(p.id ORDER BY p.created_at DESC))[1:5]', 'samplePaymentIds')
+      .where('p.created_at >= :since', { since })
+      .andWhere("p.customer->>'document' IS NOT NULL")
+      .groupBy("p.customer->>'document'")
+      .having("COUNT(*) FILTER (WHERE p.status = 'refused') >= :minRefused", { minRefused })
+      .orderBy('refused', 'DESC')
+      .addOrderBy('attempts', 'DESC')
+      .limit(limit);
+
+    if (filters.storeId) qb.andWhere('p.store_id = :storeId', { storeId: filters.storeId });
+    if (filters.method) qb.andWhere('p.method = :method', { method: filters.method });
+
+    return qb.getRawMany<DeclinedAttemptCluster>();
+  }
+}
+
+export interface DeclinedAttemptCluster {
+  document: string;
+  name: string | null;
+  email: string | null;
+  attempts: number;
+  refused: number;
+  distinctAmounts: number;
+  minAmount: number;
+  maxAmount: number;
+  firstAt: Date;
+  lastAt: Date;
+  samplePaymentIds: string[];
 }

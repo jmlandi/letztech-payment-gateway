@@ -55,6 +55,49 @@
     </div>
 
     <div class="card">
+      <label for="mode">Modo</label>
+      <select id="mode">
+        <option value="attempts">Tentativas recusadas (card testing)</option>
+        <option value="evaluations">Avaliações de risco (Koin)</option>
+      </select>
+      <p class="note" id="mode-note"></p>
+    </div>
+
+    <div class="card" id="filters-attempts">
+      <div class="row">
+        <div>
+          <label for="a_min_refused">Mín. recusas</label>
+          <input id="a_min_refused" type="number" inputmode="numeric" value="2" />
+        </div>
+        <div>
+          <label for="a_window">Janela</label>
+          <select id="a_window">
+            <option value="1">última 1h</option>
+            <option value="6">últimas 6h</option>
+            <option value="24" selected>últimas 24h</option>
+            <option value="168">últimos 7 dias</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="a_method">Método</label>
+          <select id="a_method">
+            <option value="credit_card" selected>credit_card</option>
+            <option value="">todos</option>
+            <option value="pix">pix</option>
+            <option value="boleto">boleto</option>
+          </select>
+        </div>
+        <div>
+          <label for="a_store_id">Store ID</label>
+          <input id="a_store_id" type="text" placeholder="opcional" autocomplete="off" />
+        </div>
+      </div>
+      <button id="search-attempts">Buscar tentativas</button>
+    </div>
+
+    <div class="card" id="filters-evaluations" hidden>
       <div class="row">
         <div>
           <label for="status">Status</label>
@@ -173,6 +216,85 @@
 
     function render(html) { $('results').innerHTML = html; }
     $('search').addEventListener('click', search);
+
+    // --- Declined attempts (card testing) ---
+
+    const MODE_NOTES = {
+      attempts: 'Agrupa tentativas de cobrança por documento do cliente, lendo de payments. '
+        + 'Muitas tentativas com alta taxa de recusa, valores baixos e variados numa janela curta '
+        + 'é a assinatura de alguém testando cartões roubados.',
+      evaluations: 'Avaliações da Koin. Só há dados aqui para lojas com fraudEnabled=true — '
+        + 'lojas provisionadas automaticamente pelo WooCommerce nascem com a análise desligada.',
+    };
+
+    function applyMode() {
+      const mode = $('mode').value;
+      $('filters-attempts').hidden = mode !== 'attempts';
+      $('filters-evaluations').hidden = mode !== 'evaluations';
+      $('mode-note').textContent = MODE_NOTES[mode];
+      render('');
+    }
+    $('mode').addEventListener('change', applyMode);
+    applyMode();
+
+    async function searchAttempts() {
+      const token = $('token').value.trim();
+      if (!token) { render(`<div class="err">Informe o Admin API Key.</div>`); return; }
+      sessionStorage.setItem(TOKEN_KEY, token);
+
+      const params = new URLSearchParams();
+      const minRefused = $('a_min_refused').value; if (minRefused) params.set('min_refused', minRefused);
+      const method = $('a_method').value; if (method) params.set('method', method);
+      const storeId = $('a_store_id').value.trim(); if (storeId) params.set('store_id', storeId);
+      const hours = parseInt($('a_window').value, 10);
+      params.set('since', new Date(Date.now() - hours * 3600 * 1000).toISOString());
+
+      render(`<div class="empty">Buscando…</div>`);
+      try {
+        const res = await fetch('/v1/risk/declined-attempts?' + params.toString(), {
+          headers: { Authorization: 'Bearer ' + token },
+        });
+        if (res.status === 401) { render(`<div class="err">Não autorizado — verifique o Admin API Key.</div>`); return; }
+        if (!res.ok) { render(`<div class="err">Erro ${res.status} ao buscar.</div>`); return; }
+        renderAttempts(await res.json());
+      } catch (e) {
+        render(`<div class="err">Falha de rede: ${esc(e.message)}</div>`);
+      }
+    }
+
+    function renderAttempts(body) {
+      const items = (body && body.data) || [];
+      if (!items.length) {
+        render(`<div class="empty">Nenhum agrupamento acima do limiar nesta janela.</div>`);
+        return;
+      }
+      const header = `<div class="meta">${items.length} documento(s) com recusas repetidas</div>`;
+      const html = items.map((c) => {
+        // Many small, varied amounts in a short window is the strongest tell.
+        const suspicious = c.refusalRate >= 70 && c.attempts >= 5;
+        return `
+        <div class="eval">
+          <div class="top">
+            <div><strong>${esc(c.document)}</strong>
+              <span class="badge ${suspicious ? 'denied' : 'received'}">${c.refusalRate}% recusa</span>
+            </div>
+            <div class="score">${c.refused}/${c.attempts}</div>
+          </div>
+          <div class="meta">${esc(c.name)} · ${esc(c.email)}</div>
+          <dl class="kv">
+            <dt>Tentativas</dt><dd>${c.attempts} (${c.refused} recusadas)</dd>
+            <dt>Valores</dt><dd>${fmtAmount(c.minAmount, 'BRL')} – ${fmtAmount(c.maxAmount, 'BRL')} · ${c.distinctAmounts} distinto(s)</dd>
+            <dt>Janela</dt><dd>${c.spanMinutes} min</dd>
+            <dt>Primeira</dt><dd>${fmtDate(c.firstAt)}</dd>
+            <dt>Última</dt><dd>${fmtDate(c.lastAt)}</dd>
+            <dt>Payments</dt><dd>${(c.samplePaymentIds || []).map(esc).join('<br>')}</dd>
+          </dl>
+        </div>`;
+      }).join('');
+      render(header + html);
+    }
+
+    $('search-attempts').addEventListener('click', searchAttempts);
   </script>
 </body>
 </html>
