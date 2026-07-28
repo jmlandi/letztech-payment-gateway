@@ -150,6 +150,17 @@ returned on the response) is assigned per request and carried through
 `AsyncLocalStorage`, so an inbound call and the Zoop calls it triggers share
 one id in the logs.
 
+Logs are structured JSON (pino, via `nestjs-pino`), one object per line, ready
+to ship to Loki/Datadog/CloudWatch. A pino `mixin` stamps `traceId` onto every
+line — including logs deep in a service that never sees the request — so
+`traceId=<id>` in your log tool returns the whole story of one transaction.
+`LOG_LEVEL` overrides the default (`info` in production, `debug` elsewhere);
+outside production output is pretty-printed instead.
+
+```json
+{"level":30,"traceId":"01KYM…","context":"PaymentsService","paymentId":"pay_01","status":"captured","msg":"Payment state transition"}
+```
+
 | Log | Emitted by | Carries |
 |---|---|---|
 | `Request handled` | `requestLoggingMiddleware` | traceId, method, path, status, durationMs, caller IP, redacted query |
@@ -167,12 +178,22 @@ Correlation keys: `traceId` ties one inbound request to its provider calls;
 The access log is middleware, not an interceptor, so requests rejected by a
 guard (bad `ADMIN_API_KEY`, unsigned WooCommerce call) are logged too.
 
-**Redaction.** Nothing reaches a log unfiltered. `common/utils/redact.ts`
-scrubs credentials (ZPK, `x-api-key`, mTLS material), card data (PAN, CVV,
-token ids) and PII (taxpayer id, e-mail, phone) plus payable codes (PIX EMV,
-boleto barcode), and bounds depth/size. Card tokens appear only as a
-non-chargeable last-4 fingerprint. This is covered by tests that assert no
-secret appears anywhere in the emitted log lines.
+Successful `/healthz` probes are not logged (Docker polls every 15s on two
+containers); a failing probe still is.
+
+**Redaction.** Nothing reaches a log unfiltered, in two layers:
+
+1. `common/utils/redact.ts` scrubs credentials (ZPK, `x-api-key`, mTLS
+   material), card data (PAN, CVV, token ids) and PII (taxpayer id, e-mail,
+   phone) plus payable codes (PIX EMV, boleto barcode) at arbitrary depth, and
+   bounds depth/size. Card tokens appear only as a non-chargeable last-4
+   fingerprint.
+2. pino's own `redact` paths act as a safety net for a log line added later
+   that forgets step 1. Note pino's `*` spans exactly one level, so each key is
+   listed both at the root and one level down.
+
+Tests assert that no credential, card token or PII appears anywhere in the
+emitted log lines.
 
 ---
 
