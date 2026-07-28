@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as https from 'https';
 import { Logger } from '@nestjs/common';
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import {
   ChargeResult,
   CreateChargeCmd,
@@ -9,6 +9,30 @@ import {
   PaymentProvider,
   RefundResult,
 } from '../../domain/interfaces/payment-provider.interface';
+import { getTraceId } from '../../common/context/request-context';
+import { normalizeZoopPath, redactDeep, tokenFingerprint } from '../../common/utils/redact';
+
+declare module 'axios' {
+  // Per-call annotations read back by the logging interceptors below.
+  export interface AxiosRequestConfig {
+    metadata?: {
+      operation?: string;
+      /** Our payment id — the same value Zoop stores as reference_id. */
+      referenceId?: string;
+      traceId?: string;
+      startedAt?: bigint;
+      /** Last 4 chars of the card token — correlates retries, can't be charged with. */
+      tokenFp?: string | null;
+      /** A 404 is a valid answer for this call, not a failure worth warning about. */
+      expectNotFound?: boolean;
+    };
+  }
+}
+
+function elapsedMs(startedAt: bigint | undefined): number | undefined {
+  if (startedAt === undefined) return undefined;
+  return Math.round(Number(process.hrtime.bigint() - startedAt) / 1e6);
+}
 
 // Payment/transaction endpoints moved off api.zoop.ws to a dedicated host after
 // Zoop's mTLS rollout; api.zoop.ws now only serves client-side tokenization.
@@ -52,6 +76,96 @@ export class ZoopPaymentAdapter implements PaymentProvider {
       timeout: 20_000,
       ...(httpsAgent ? { httpsAgent } : {}),
     });
+
+    this.installLogging();
+  }
+
+  /**
+   * Logs every call to Zoop — attempt, outcome and latency — on the shared
+   * axios instance, so each operation is covered without per-method wiring.
+   *
+   * Nothing derived from `config.headers`, `config.auth` or `config.httpsAgent`
+   * is ever logged: those hold the ZPK, the x-api-key and the raw mTLS
+   * cert/key material (the same reason `sanitizeException` in the global
+   * exception filter refuses to log an Axios error's `.config`). Payloads and
+   * remote bodies go through `redactDeep` before they reach the logger.
+   */
+  private installLogging(): void {
+    this.http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+      config.metadata = {
+        ...config.metadata,
+        traceId: getTraceId(),
+        startedAt: process.hrtime.bigint(),
+      };
+      this.logger.log(
+        {
+          traceId: config.metadata.traceId,
+          provider: 'zoop',
+          operation: config.metadata.operation,
+          referenceId: config.metadata.referenceId,
+          method: config.method?.toUpperCase(),
+          path: normalizeZoopPath(config.url),
+          sandbox: this.opts.sandbox !== false,
+          tokenFp: config.metadata.tokenFp,
+          request: redactDeep(config.data),
+        },
+        'Zoop request sent',
+      );
+      return config;
+    });
+
+    this.http.interceptors.response.use(
+      (response) => {
+        const meta = response.config.metadata;
+        const data = response.data as Partial<ZoopTransaction> | undefined;
+        this.logger.log(
+          {
+            traceId: meta?.traceId,
+            provider: 'zoop',
+            operation: meta?.operation,
+            referenceId: meta?.referenceId,
+            method: response.config.method?.toUpperCase(),
+            path: normalizeZoopPath(response.config.url),
+            status: response.status,
+            durationMs: elapsedMs(meta?.startedAt),
+            providerId: data?.id,
+            providerStatus: data?.status,
+          },
+          'Zoop response received',
+        );
+        return response;
+      },
+      (error: unknown) => {
+        const err = error as AxiosError;
+        const meta = err.config?.metadata;
+        const payload = {
+          traceId: meta?.traceId,
+          provider: 'zoop',
+          operation: meta?.operation,
+          referenceId: meta?.referenceId,
+          method: err.config?.method?.toUpperCase(),
+          path: normalizeZoopPath(err.config?.url),
+          status: err.response?.status,
+          durationMs: elapsedMs(meta?.startedAt),
+          // `code` distinguishes a refusal from an unreachable/slow Zoop
+          // (ECONNABORTED on timeout, ECONNREFUSED, ETIMEDOUT).
+          code: err.code,
+          message: err.message,
+          response: redactDeep(err.response?.data),
+        };
+        // A 4xx is Zoop refusing a call (bad seller, declined card); a 5xx,
+        // timeout or transport failure is Zoop being unavailable to us.
+        const status = err.response?.status;
+        if (status === 404 && meta?.expectNotFound) {
+          this.logger.log(payload, 'Zoop resource not found');
+        } else if (status && status < 500) {
+          this.logger.warn(payload, 'Zoop call refused');
+        } else {
+          this.logger.error(payload, 'Zoop call failed');
+        }
+        return Promise.reject(error);
+      },
+    );
   }
 
   private get marketplaceId() { return this.opts.marketplaceId; }
@@ -73,7 +187,9 @@ export class ZoopPaymentAdapter implements PaymentProvider {
       payment_type: 'pix',
       pix: { expiration_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() },
     };
-    const res = await this.http.post(`/v1/marketplaces/${this.marketplaceId}/transactions`, payload);
+    const res = await this.http.post(`/v1/marketplaces/${this.marketplaceId}/transactions`, payload, {
+      metadata: { operation: 'createCharge.pix', referenceId: cmd.referenceId },
+    });
     const data = res.data as ZoopTransaction;
     return {
       providerId: data.id,
@@ -96,7 +212,9 @@ export class ZoopPaymentAdapter implements PaymentProvider {
       payment_type: 'boleto',
       boleto: { expiration_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() },
     };
-    const res = await this.http.post(`/v1/marketplaces/${this.marketplaceId}/transactions`, payload);
+    const res = await this.http.post(`/v1/marketplaces/${this.marketplaceId}/transactions`, payload, {
+      metadata: { operation: 'createCharge.boleto', referenceId: cmd.referenceId },
+    });
     const data = res.data as ZoopTransaction;
     return {
       providerId: data.id,
@@ -122,31 +240,45 @@ export class ZoopPaymentAdapter implements PaymentProvider {
         ? { mode: 'with_interest', number_installments: cmd.installments }
         : undefined,
     };
-    const res = await this.http.post(`/v1/marketplaces/${this.marketplaceId}/transactions`, payload);
+    const res = await this.http.post(`/v1/marketplaces/${this.marketplaceId}/transactions`, payload, {
+      metadata: {
+        operation: 'createCharge.credit_card',
+        referenceId: cmd.referenceId,
+        tokenFp: tokenFingerprint(cmd.token),
+      },
+    });
     const data = res.data as ZoopTransaction;
     return { providerId: data.id, status: mapZoopStatus(data.status), raw: data };
   }
 
   async capture(chargeId: string, amount?: Money): Promise<ChargeResult> {
     const payload = amount ? { amount: amount.amount } : {};
-    const res = await this.http.post(`/v1/marketplaces/${this.marketplaceId}/transactions/${chargeId}/capture`, payload);
+    const res = await this.http.post(`/v1/marketplaces/${this.marketplaceId}/transactions/${chargeId}/capture`, payload, {
+      metadata: { operation: 'capture' },
+    });
     const data = res.data as ZoopTransaction;
     return { providerId: data.id, status: mapZoopStatus(data.status), raw: data };
   }
 
   async void(chargeId: string): Promise<void> {
-    await this.http.post(`/v1/marketplaces/${this.marketplaceId}/transactions/${chargeId}/void`);
+    await this.http.post(`/v1/marketplaces/${this.marketplaceId}/transactions/${chargeId}/void`, undefined, {
+      metadata: { operation: 'void' },
+    });
   }
 
   async refund(chargeId: string, amount?: Money): Promise<RefundResult> {
     const payload = amount ? { amount: amount.amount } : {};
-    const res = await this.http.post(`/v1/marketplaces/${this.marketplaceId}/transactions/${chargeId}/refund`, payload);
+    const res = await this.http.post(`/v1/marketplaces/${this.marketplaceId}/transactions/${chargeId}/refund`, payload, {
+      metadata: { operation: 'refund' },
+    });
     const data = res.data as { id: string; status: string };
     return { refundId: data.id, status: 'refunded', raw: data };
   }
 
   async getCharge(chargeId: string): Promise<ChargeResult> {
-    const res = await this.http.get(`/v1/marketplaces/${this.marketplaceId}/transactions/${chargeId}`);
+    const res = await this.http.get(`/v1/marketplaces/${this.marketplaceId}/transactions/${chargeId}`, {
+      metadata: { operation: 'getCharge' },
+    });
     const data = res.data as ZoopTransaction;
     return { providerId: data.id, status: mapZoopStatus(data.status), raw: data };
   }
@@ -154,7 +286,9 @@ export class ZoopPaymentAdapter implements PaymentProvider {
   /** Fetches a seller's record, or null if it doesn't exist on this marketplace. */
   async getSeller(sellerId: string): Promise<ZoopSeller | null> {
     try {
-      const res = await this.http.get(`/v1/marketplaces/${this.marketplaceId}/sellers/${sellerId}`);
+      const res = await this.http.get(`/v1/marketplaces/${this.marketplaceId}/sellers/${sellerId}`, {
+        metadata: { operation: 'getSeller', expectNotFound: true },
+      });
       return res.data as ZoopSeller;
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.status === 404) return null;

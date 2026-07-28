@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>LetzTech · Review de Risco</title>
+  <style>
+    :root {
+      --bg: #0f1115; --panel: #191c23; --border: #2a2f3a; --text: #e7e9ee;
+      --muted: #9aa2b1; --accent: #5b8cff; --ok: #2ecc71; --warn: #f1c40f; --bad: #ff5c5c;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text); }
+    header { padding: 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 5; }
+    h1 { font-size: 18px; margin: 0 0 2px; }
+    .sub { color: var(--muted); font-size: 13px; }
+    main { padding: 16px; max-width: 900px; margin: 0 auto; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+    label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 4px; }
+    input, select, button { width: 100%; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--border);
+      background: #12151b; color: var(--text); font-size: 15px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    button { background: var(--accent); border: none; color: #fff; font-weight: 600; margin-top: 12px; cursor: pointer; }
+    button.secondary { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+    .eval { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+    .eval .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .04em; }
+    .badge.approved { background: rgba(46,204,113,.15); color: var(--ok); }
+    .badge.denied { background: rgba(255,92,92,.15); color: var(--bad); }
+    .badge.received, .badge.pending { background: rgba(241,196,15,.15); color: var(--warn); }
+    .score { font-variant-numeric: tabular-nums; font-weight: 700; }
+    .kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin-top: 8px; font-size: 13px; }
+    .kv dt { color: var(--muted); }
+    .kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+    .amount { font-weight: 600; }
+    .meta { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    .empty, .err { text-align: center; color: var(--muted); padding: 24px; }
+    .err { color: var(--bad); }
+    .note { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Review de Risco · LetzTech</h1>
+    <div class="sub">Avaliações de fraude — PII sempre mascarada</div>
+  </header>
+  <main>
+    <div class="card" id="auth-card">
+      <label for="token">Admin API Key (Bearer)</label>
+      <input id="token" type="password" placeholder="cole seu ADMIN_API_KEY" autocomplete="off" />
+      <p class="note">Guardado só nesta aba (sessionStorage) e enviado como <code>Authorization: Bearer</code>.
+        Não é persistido; fecha a aba e some.</p>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <label for="status">Status</label>
+          <select id="status">
+            <option value="">todos</option>
+            <option value="denied">denied</option>
+            <option value="approved">approved</option>
+            <option value="received">received</option>
+          </select>
+        </div>
+        <div>
+          <label for="min_score">Score mínimo</label>
+          <input id="min_score" type="number" inputmode="numeric" placeholder="ex: 70" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="store_id">Store ID</label>
+          <input id="store_id" type="text" placeholder="opcional" autocomplete="off" />
+        </div>
+        <div>
+          <label for="limit">Limite</label>
+          <input id="limit" type="number" inputmode="numeric" value="20" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="from">De</label>
+          <input id="from" type="datetime-local" />
+        </div>
+        <div>
+          <label for="to">Até</label>
+          <input id="to" type="datetime-local" />
+        </div>
+      </div>
+      <button id="search">Buscar avaliações</button>
+    </div>
+
+    <div id="results"></div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const TOKEN_KEY = 'letztech.admin.token';
+
+    // Restore token for this tab only.
+    $('token').value = sessionStorage.getItem(TOKEN_KEY) || '';
+
+    const fmtAmount = (cents, currency) => {
+      try {
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: currency || 'BRL' }).format((cents || 0) / 100);
+      } catch { return ((cents || 0) / 100).toFixed(2) + ' ' + (currency || ''); }
+    };
+    const fmtDate = (iso) => iso ? new Date(iso).toLocaleString('pt-BR') : '—';
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    const toIso = (localValue) => localValue ? new Date(localValue).toISOString() : '';
+
+    async function search() {
+      const token = $('token').value.trim();
+      if (!token) { render(`<div class="err">Informe o Admin API Key.</div>`); return; }
+      sessionStorage.setItem(TOKEN_KEY, token);
+
+      const params = new URLSearchParams();
+      const status = $('status').value; if (status) params.set('status', status);
+      const minScore = $('min_score').value; if (minScore) params.set('min_score', minScore);
+      const storeId = $('store_id').value.trim(); if (storeId) params.set('store_id', storeId);
+      const limit = $('limit').value; if (limit) params.set('limit', limit);
+      const from = toIso($('from').value); if (from) params.set('from', from);
+      const to = toIso($('to').value); if (to) params.set('to', to);
+
+      render(`<div class="empty">Buscando…</div>`);
+      try {
+        const res = await fetch('/v1/risk/evaluations?' + params.toString(), {
+          headers: { Authorization: 'Bearer ' + token },
+        });
+        if (res.status === 401) { render(`<div class="err">Não autorizado — verifique o Admin API Key.</div>`); return; }
+        if (!res.ok) { render(`<div class="err">Erro ${res.status} ao buscar.</div>`); return; }
+        const body = await res.json();
+        renderList(body);
+      } catch (e) {
+        render(`<div class="err">Falha de rede: ${esc(e.message)}</div>`);
+      }
+    }
+
+    function renderList(body) {
+      const items = (body && body.data) || [];
+      if (!items.length) { render(`<div class="empty">Nenhuma avaliação encontrada.</div>`); return; }
+      const header = `<div class="meta">${body.total} avaliação(ões) — mostrando ${items.length}</div>`;
+      const html = items.map((e) => {
+        const c = e.customer || {};
+        const st = (e.status || '').toLowerCase();
+        return `
+        <div class="eval">
+          <div class="top">
+            <div><strong>${esc(e.provider)}</strong> · <span class="badge ${esc(st)}">${esc(e.status)}</span></div>
+            <div class="score">score ${e.score ?? '—'}</div>
+          </div>
+          <div class="meta">${esc(e.type)} · ${fmtDate(e.createdAt)}</div>
+          <dl class="kv">
+            <dt>Valor</dt><dd class="amount">${fmtAmount(e.payment?.amount, e.payment?.currency)}</dd>
+            <dt>Método</dt><dd>${esc(e.payment?.method)} · ${esc(e.payment?.status)}</dd>
+            <dt>Ref</dt><dd>${esc(e.payment?.externalRef)}</dd>
+            <dt>Cliente</dt><dd>${esc(c.name)}</dd>
+            <dt>Documento</dt><dd>${esc(c.document)}</dd>
+            <dt>E-mail</dt><dd>${esc(c.email)}</dd>
+            <dt>Telefone</dt><dd>${esc(c.phone)}</dd>
+            <dt>IP</dt><dd>${esc(c.ip)}</dd>
+            <dt>Payment</dt><dd>${esc(e.paymentId)}</dd>
+          </dl>
+        </div>`;
+      }).join('');
+      render(header + html);
+    }
+
+    function render(html) { $('results').innerHTML = html; }
+    $('search').addEventListener('click', search);
+  </script>
+</body>
+</html>

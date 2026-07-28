@@ -116,7 +116,21 @@ export class PaymentsService {
 
   async saveFraudEvaluation(data: Omit<FraudEvaluation, 'id' | 'createdAt' | 'updatedAt' | 'payment'>): Promise<FraudEvaluation> {
     const record = this.fraudEvalRepo.create({ id: generateId('fev'), ...data });
-    return this.fraudEvalRepo.save(record);
+    const saved = await this.fraudEvalRepo.save(record);
+    // Structured, PII-free risk log for observability (Loki/Datadog/CloudWatch).
+    this.logger.log(
+      {
+        fraudEvaluationId: saved.id,
+        paymentId: saved.paymentId,
+        storeId: saved.storeId,
+        provider: saved.provider,
+        type: saved.type,
+        status: saved.status,
+        score: saved.score,
+      },
+      'Fraud evaluation recorded',
+    );
+    return saved;
   }
 
   async saveProviderCharge(data: Omit<ProviderCharge, 'id' | 'createdAt' | 'updatedAt' | 'payment'>): Promise<ProviderCharge> {
@@ -160,5 +174,61 @@ export class PaymentsService {
 
   async findByProviderEvent(providerEventId: string): Promise<PaymentEvent | null> {
     return this.eventRepo.findOne({ where: { raw: { id: providerEventId } as never } });
+  }
+
+  /**
+   * Read-only risk review: fraud evaluations joined with their payment.
+   * The raw provider payload (`raw`) is intentionally never selected here —
+   * it contains unmasked PII and must not leave the database via this path.
+   * Callers are responsible for masking the payment's customer blob.
+   */
+  async findFraudEvaluations(filters: {
+    storeId?: string;
+    status?: string;
+    provider?: string;
+    minScore?: number;
+    from?: string;
+    to?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: Array<FraudEvaluation & { payment: Payment }>; total: number }> {
+    const qb = this.fraudEvalRepo
+      .createQueryBuilder('fe')
+      .innerJoinAndSelect('fe.payment', 'p')
+      // Explicit select — never include fe.raw (unmasked PII payload).
+      .select([
+        'fe.id',
+        'fe.paymentId',
+        'fe.storeId',
+        'fe.provider',
+        'fe.referenceId',
+        'fe.evaluationId',
+        'fe.type',
+        'fe.status',
+        'fe.score',
+        'fe.createdAt',
+        'p.id',
+        'p.externalRef',
+        'p.status',
+        'p.method',
+        'p.amount',
+        'p.currency',
+        'p.customer',
+        'p.createdAt',
+      ]);
+
+    if (filters.storeId) qb.andWhere('fe.store_id = :storeId', { storeId: filters.storeId });
+    if (filters.status) qb.andWhere('fe.status = :status', { status: filters.status });
+    if (filters.provider) qb.andWhere('fe.provider = :provider', { provider: filters.provider });
+    if (filters.minScore !== undefined) qb.andWhere('fe.score >= :minScore', { minScore: filters.minScore });
+    if (filters.from) qb.andWhere('fe.created_at >= :from', { from: filters.from });
+    if (filters.to) qb.andWhere('fe.created_at <= :to', { to: filters.to });
+
+    const limit = Math.min(filters.limit ?? 20, 100);
+    const page = filters.page ?? 1;
+    qb.take(limit).skip((page - 1) * limit).orderBy('fe.created_at', 'DESC');
+
+    const [data, total] = await qb.getManyAndCount();
+    return { data: data as Array<FraudEvaluation & { payment: Payment }>, total };
   }
 }
