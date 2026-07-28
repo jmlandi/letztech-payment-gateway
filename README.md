@@ -132,13 +132,47 @@ src/
 │
 ├── common/
 │   ├── filters/             # Global error format
-│   ├── interceptors/        # X-Trace-Id on every request
-│   └── utils/               # HMAC signing, constant-time compare, ID generation, PII masking
+│   ├── middleware/          # X-Trace-Id + one access log line per request
+│   ├── context/             # AsyncLocalStorage trace context
+│   └── utils/               # HMAC signing, constant-time compare, ID generation, PII masking, log redaction
 │
 └── database/
     ├── data-source.ts       # TypeORM CLI data source
     └── migrations/          # SQL migrations
 ```
+
+---
+
+## Observability
+
+Every transaction is traceable end to end. A trace id (`X-Trace-Id`, also
+returned on the response) is assigned per request and carried through
+`AsyncLocalStorage`, so an inbound call and the Zoop calls it triggers share
+one id in the logs.
+
+| Log | Emitted by | Carries |
+|---|---|---|
+| `Request handled` | `requestLoggingMiddleware` | traceId, method, path, status, durationMs, caller IP, redacted query |
+| `Zoop request sent` | `ZoopPaymentAdapter` | traceId, operation, referenceId, path, redacted payload, card-token fingerprint |
+| `Zoop response received` | `ZoopPaymentAdapter` | traceId, status, durationMs, Zoop transaction id and status |
+| `Zoop call refused` (warn) | `ZoopPaymentAdapter` | 4xx from Zoop — declined card, bad seller |
+| `Zoop call failed` (error) | `ZoopPaymentAdapter` | 5xx/timeout/transport failure, with `code` (e.g. `ECONNABORTED`) |
+| `Fraud evaluation recorded` | `PaymentsService` | provider, status, score, paymentId |
+| `Payment state transition` | `PaymentsService` | from/to status, actor |
+| `Zoop/Koin webhook received` | `WebhooksController` | event id, type, transaction id |
+
+Correlation keys: `traceId` ties one inbound request to its provider calls;
+`referenceId` on a Zoop log line **is** the internal payment id.
+
+The access log is middleware, not an interceptor, so requests rejected by a
+guard (bad `ADMIN_API_KEY`, unsigned WooCommerce call) are logged too.
+
+**Redaction.** Nothing reaches a log unfiltered. `common/utils/redact.ts`
+scrubs credentials (ZPK, `x-api-key`, mTLS material), card data (PAN, CVV,
+token ids) and PII (taxpayer id, e-mail, phone) plus payable codes (PIX EMV,
+boleto barcode), and bounds depth/size. Card tokens appear only as a
+non-chargeable last-4 fingerprint. This is covered by tests that assert no
+secret appears anywhere in the emitted log lines.
 
 ---
 
