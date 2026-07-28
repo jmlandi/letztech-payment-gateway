@@ -133,12 +133,29 @@ src/
 ├── common/
 │   ├── filters/             # Global error format
 │   ├── interceptors/        # X-Trace-Id on every request
-│   └── utils/               # HMAC signing, constant-time compare, ID generation
+│   └── utils/               # HMAC signing, constant-time compare, ID generation, PII masking
 │
 └── database/
     ├── data-source.ts       # TypeORM CLI data source
     └── migrations/          # SQL migrations
 ```
+
+---
+
+## Risk review
+
+Read-only surface to inspect fraud evaluations, protected by the same
+`ADMIN_API_KEY` Bearer auth as the rest of `/v1/`.
+
+- **API:** `GET /v1/risk/evaluations` — filters: `store_id`, `status`
+  (`approved` / `denied` / `received`), `provider`, `min_score`, `from`,
+  `to` (ISO), `page`, `limit` (max 100). Joins each evaluation with its
+  payment. Customer PII (name, document, email, phone, IP) is **always
+  masked**; the raw provider payload is never returned by this route.
+- **Page:** `GET /public/risk.html` — mobile-friendly viewer for the same
+  data. The admin key is entered in-page and kept only in the tab's
+  `sessionStorage`. Static assets under `public/` are served via
+  `useStaticAssets` (see `src/main.ts`).
 
 ---
 

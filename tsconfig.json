@@ -19,7 +19,7 @@
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
     "strictPropertyInitialization": false,
-    "types": ["node"],
+    "types": ["node", "jest"],
     "paths": {
       "@/*": ["src/*"]
     }
