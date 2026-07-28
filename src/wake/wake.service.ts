@@ -156,6 +156,15 @@ export class WakeService {
     // For card: optional pre-evaluation before authorization
     if (method === 'credit_card' && settings.fraudEnabled && riskService_preEval(this.riskService, settings)) {
       const preVerdict = await this.riskService.preEvaluate(settings, fraudCtx);
+      if (preVerdict) {
+        await this.paymentsService.recordFraudEvaluation({
+          paymentId: payment.id,
+          storeId: store.id,
+          provider: this.riskService.providerName(settings),
+          type: 'pre_evaluation',
+          verdict: preVerdict,
+        });
+      }
       if (preVerdict?.status === 'denied') {
         await this.paymentsService.transition(payment.id, store.id, PaymentStatus.REFUSED, 'koin_pre_eval', preVerdict);
         const response = { statusId: 5, mensagem: 'Pagamento recusado pela análise de risco', transacao: payment.id };
@@ -166,6 +175,14 @@ export class WakeService {
 
     // Fraud evaluation (for pix/boleto: before charge; for card: after pre-auth, handled in flow)
     const fraudVerdict = await this.riskService.evaluate(settings, fraudCtx);
+
+    await this.paymentsService.recordFraudEvaluation({
+      paymentId: payment.id,
+      storeId: store.id,
+      provider: this.riskService.providerName(settings),
+      type: 'evaluation',
+      verdict: fraudVerdict,
+    });
 
     if (fraudVerdict.status === 'denied') {
       await this.paymentsService.transition(payment.id, store.id, PaymentStatus.REFUSED, 'koin_eval', fraudVerdict);

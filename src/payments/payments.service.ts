@@ -133,6 +133,43 @@ export class PaymentsService {
     return saved;
   }
 
+  /**
+   * Persists a fraud verdict so it shows up in risk review afterwards.
+   *
+   * Non-fatal on purpose: this is an audit record, and failing to write it
+   * must never refuse a payment the provider already approved. A failure is
+   * logged at error level instead of propagating.
+   *
+   * Noop verdicts are recorded too — knowing a charge was never screened is
+   * itself the finding when a store still has fraudEnabled=false.
+   */
+  async recordFraudEvaluation(params: {
+    paymentId: string;
+    storeId: string;
+    provider: string;
+    type: 'pre_evaluation' | 'evaluation';
+    verdict: { status: string; score: number; evaluationId?: string; raw: unknown };
+  }): Promise<void> {
+    try {
+      await this.saveFraudEvaluation({
+        paymentId: params.paymentId,
+        storeId: params.storeId,
+        provider: params.provider,
+        referenceId: params.paymentId,
+        evaluationId: params.verdict.evaluationId ?? null,
+        type: params.type,
+        status: params.verdict.status,
+        score: params.verdict.score ?? null,
+        raw: params.verdict.raw ?? null,
+      });
+    } catch (err) {
+      this.logger.error(
+        { paymentId: params.paymentId, storeId: params.storeId, provider: params.provider, type: params.type, err },
+        'Failed to persist fraud evaluation (payment flow continues)',
+      );
+    }
+  }
+
   async saveProviderCharge(data: Omit<ProviderCharge, 'id' | 'createdAt' | 'updatedAt' | 'payment'>): Promise<ProviderCharge> {
     const record = this.chargeRepo.create({ id: generateId('chg'), ...data });
     return this.chargeRepo.save(record);
@@ -226,9 +263,75 @@ export class PaymentsService {
 
     const limit = Math.min(filters.limit ?? 20, 100);
     const page = filters.page ?? 1;
-    qb.take(limit).skip((page - 1) * limit).orderBy('fe.created_at', 'DESC');
+    // Must be the entity property (createdAt), not the column (created_at):
+    // take/skip over a join makes TypeORM resolve the sort against property
+    // metadata, and a column name there throws at runtime.
+    qb.take(limit).skip((page - 1) * limit).orderBy('fe.createdAt', 'DESC');
 
     const [data, total] = await qb.getManyAndCount();
     return { data: data as Array<FraudEvaluation & { payment: Payment }>, total };
   }
+
+  /**
+   * Card-testing view: charge attempts clustered by customer document.
+   *
+   * Reads `payments` rather than `fraud_evaluations` on purpose — a store with
+   * `fraudEnabled: false` (the default, and what WooCommerce auto-provisioning
+   * creates) never reaches Koin, so a fraud run leaves no evaluation behind but
+   * always leaves payment rows. Repeated attempts on one document with most of
+   * them refused is the signature of someone walking a list of stolen cards.
+   *
+   * Aggregate only: no raw payload, and the caller masks the identity fields.
+   */
+  async findDeclinedAttemptClusters(filters: {
+    storeId?: string;
+    method?: string;
+    since?: string;
+    minRefused?: number;
+    limit?: number;
+  }): Promise<DeclinedAttemptCluster[]> {
+    const since = filters.since ?? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const minRefused = filters.minRefused ?? 2;
+    const limit = Math.min(filters.limit ?? 25, 100);
+
+    const qb = this.paymentRepo
+      .createQueryBuilder('p')
+      .select("p.customer->>'document'", 'document')
+      .addSelect("MIN(p.customer->>'name')", 'name')
+      .addSelect("MIN(p.customer->>'email')", 'email')
+      .addSelect('COUNT(*)::int', 'attempts')
+      .addSelect("COUNT(*) FILTER (WHERE p.status = 'refused')::int", 'refused')
+      .addSelect('COUNT(DISTINCT p.amount)::int', 'distinctAmounts')
+      .addSelect('MIN(p.amount)::int', 'minAmount')
+      .addSelect('MAX(p.amount)::int', 'maxAmount')
+      .addSelect('MIN(p.created_at)', 'firstAt')
+      .addSelect('MAX(p.created_at)', 'lastAt')
+      .addSelect('(ARRAY_AGG(p.id ORDER BY p.created_at DESC))[1:5]', 'samplePaymentIds')
+      .where('p.created_at >= :since', { since })
+      .andWhere("p.customer->>'document' IS NOT NULL")
+      .groupBy("p.customer->>'document'")
+      .having("COUNT(*) FILTER (WHERE p.status = 'refused') >= :minRefused", { minRefused })
+      .orderBy('refused', 'DESC')
+      .addOrderBy('attempts', 'DESC')
+      .limit(limit);
+
+    if (filters.storeId) qb.andWhere('p.store_id = :storeId', { storeId: filters.storeId });
+    if (filters.method) qb.andWhere('p.method = :method', { method: filters.method });
+
+    return qb.getRawMany<DeclinedAttemptCluster>();
+  }
+}
+
+export interface DeclinedAttemptCluster {
+  document: string;
+  name: string | null;
+  email: string | null;
+  attempts: number;
+  refused: number;
+  distinctAmounts: number;
+  minAmount: number;
+  maxAmount: number;
+  firstAt: Date;
+  lastAt: Date;
+  samplePaymentIds: string[];
 }

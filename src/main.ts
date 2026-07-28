@@ -1,14 +1,18 @@
 import 'reflect-metadata';
 import { join } from 'path';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger as NestLogger, ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { requestLoggingMiddleware } from './common/middleware/request-logging.middleware';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+  // bufferLogs holds startup output until pino takes over, so boot-time lines
+  // are structured too instead of falling back to the default logger.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true, bufferLogs: true });
+  app.useLogger(app.get(Logger));
 
   // First in the chain: assigns the trace id, binds it to the async context
   // for downstream provider calls, and logs every request — including ones
@@ -25,7 +29,7 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
-  console.log(`API running on port ${port}`);
+  new NestLogger('Bootstrap').log({ port }, 'API started');
 }
 
 bootstrap();

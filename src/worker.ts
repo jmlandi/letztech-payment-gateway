@@ -1,10 +1,13 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { Module } from '@nestjs/common';
+import { Logger as NestLogger, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
 import { ScheduleModule } from '@nestjs/schedule';
+import { Logger, LoggerModule } from 'nestjs-pino';
+
+import { loggerParams } from './common/logging/logger.config';
 
 import { Store } from './stores/entities/store.entity';
 import { StoreCredentials } from './stores/entities/store-credentials.entity';
@@ -29,6 +32,7 @@ const ENTITIES = [
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    LoggerModule.forRoot(loggerParams()),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -52,9 +56,10 @@ const ENTITIES = [
 class WorkerModule {}
 
 async function bootstrap() {
-  const app = await NestFactory.create(WorkerModule);
+  const app = await NestFactory.create(WorkerModule, { bufferLogs: true });
+  app.useLogger(app.get(Logger));
   await app.init();
-  console.log('Worker started');
+  new NestLogger('Bootstrap').log('Worker started');
 }
 
 bootstrap();

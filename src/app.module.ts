@@ -3,6 +3,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
 import { ScheduleModule } from '@nestjs/schedule';
+import { LoggerModule } from 'nestjs-pino';
+
+import { loggerParams } from './common/logging/logger.config';
 
 import { Store } from './stores/entities/store.entity';
 import { StoreCredentials } from './stores/entities/store-credentials.entity';
@@ -37,6 +40,7 @@ const ENTITIES = [
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    LoggerModule.forRoot(loggerParams()),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

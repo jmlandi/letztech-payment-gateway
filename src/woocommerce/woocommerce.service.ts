@@ -109,6 +109,14 @@ export class WooCommerceService {
       items: [],
     });
 
+    await this.paymentsService.recordFraudEvaluation({
+      paymentId: payment.id,
+      storeId: store.id,
+      provider: this.riskService.providerName(settings),
+      type: 'evaluation',
+      verdict: fraudVerdict,
+    });
+
     if (fraudVerdict.status === 'denied') {
       await this.paymentsService.transition(payment.id, store.id, PaymentStatus.REFUSED, 'koin_eval', fraudVerdict);
       const response = { error: { message: 'Pagamento recusado pela análise de risco' } };
