@@ -16,10 +16,9 @@ scrape_configs:
     static_configs:
       - targets: ["node-exporter:9100"]
 
-  # Comment out (and remove from docker-compose.yml) if cAdvisor misbehaves
-  # on this host's kernel/cgroup setup — node-exporter + the app job above
-  # already cover host resources and request-level metrics, the two things
-  # that matter most. See docker-compose.yml's comment on the cadvisor service.
-  - job_name: cadvisor
-    static_configs:
-      - targets: ["cadvisor:8080"]
+  # cadvisor job disabled along with the service in docker-compose.yml --
+  # see that file's comment for why. Re-add if a future host proves more
+  # compatible.
+  # - job_name: cadvisor
+  #   static_configs:
+  #     - targets: ["cadvisor:8080"]

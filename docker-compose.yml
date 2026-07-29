@@ -131,22 +131,26 @@ services:
       - --path.rootfs=/rootfs
       - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
 
-  # cAdvisor has a history of cgroup-v2 mount quirks on some kernels. After
-  # bringing it up: `docker compose logs cadvisor` (no repeating errors) and
-  # `curl -s localhost:8080/metrics | grep container_cpu_usage_seconds_total`
-  # (real values). If it misbehaves, comment this whole service out and drop
-  # its prometheus.yml scrape job — node-exporter + the app's own /metrics
-  # already cover host resources and request-level metrics, the two things
-  # that matter most here. Per-container granularity is what's lost.
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.49.1
-    restart: unless-stopped
-    privileged: true
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
+  # cAdvisor is disabled: on this VPS it never identified any Docker
+  # container by ID (repeating "failed to identify the read-write layer ID"
+  # errors) and only exposed system-level cgroup slices, not per-container
+  # metrics -- confirmed by checking for the running app container's actual
+  # ID in its /metrics output and finding nothing. This is the exact
+  # environment-specific failure this service was always flagged as
+  # optional for. node-exporter (host resources) + the app's own /metrics
+  # (request-level) already cover what matters most; per-container
+  # granularity is what's lost. Re-enable by uncommenting this block and
+  # the "cadvisor" job in prometheus/prometheus.yml if a future host proves
+  # more compatible.
+  # cadvisor:
+  #   image: gcr.io/cadvisor/cadvisor:v0.49.1
+  #   restart: unless-stopped
+  #   privileged: true
+  #   volumes:
+  #     - /:/rootfs:ro
+  #     - /var/run:/var/run:ro
+  #     - /sys:/sys:ro
+  #     - /var/lib/docker/:/var/lib/docker:ro
 
   grafana:
     image: grafana/grafana:11.2.0
