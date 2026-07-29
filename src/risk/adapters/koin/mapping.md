@@ -8,7 +8,7 @@ Campos enviados na avaliação Koin mapeados a partir do payload Wake (`POST /pa
 | `order_id`           | `pedido` (número do pedido)              |
 | `amount`             | `pagamento.valor` (em centavos)          |
 | `fingerprint_id`     | `fraudId` coletado pelo script Koin      |
-| `callback_url`       | `https://pay.letztech.com.br/webhooks/koin` |
+| `callback_url`       | `https://pay.letstech.com.br/webhooks/koin` |
 | `customer.name`      | `usuario.nome`                           |
 | `customer.document`  | `usuario.cpf` ou `usuario.cnpj`          |
 | `customer.email`     | `usuario.email`                          |

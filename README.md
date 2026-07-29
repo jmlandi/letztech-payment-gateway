@@ -90,7 +90,7 @@ All credentials go in `.env`. Never commit this file.
 | `KOIN_SANDBOX` | `true` | Set to `false` in production |
 | `PORT` | `3000` | HTTP port for the API |
 | `LOG_LEVEL` | `debug` | `debug` / `info` / `warn` / `error` |
-| `BASE_URL` | — | Public base URL of this service (e.g. `https://pay.letztech.com.br`) — used to build the Koin callback URL |
+| `BASE_URL` | — | Public base URL of this service (e.g. `https://pay.letstech.com.br`) — used to build the Koin callback URL |
 
 > **Note:** Koin credentials are stored per store in the database (encrypted with `ENCRYPTION_KEY`), not in `.env`. They are configured via `PATCH /v1/stores/:id/settings` after onboarding each store.
 
