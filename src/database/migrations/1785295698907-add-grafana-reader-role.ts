@@ -1,5 +1,10 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
+async function currentDatabase(queryRunner: QueryRunner): Promise<string> {
+  const [{ current_database: dbName }] = await queryRunner.query('SELECT current_database()');
+  return dbName as string;
+}
+
 /**
  * A read-only Postgres role for Grafana's datasource — no existing pattern
  * in this repo for extra DB roles (no init scripts, no
@@ -32,7 +37,12 @@ export class AddGrafanaReaderRole1785295698907 implements MigrationInterface {
       $$;
     `);
 
-    await queryRunner.query(`GRANT CONNECT ON DATABASE gateway TO grafana_reader;`);
+    // GRANT ... ON DATABASE needs the name as a literal identifier, not an
+    // expression — current_database() can't sit in that position, so fetch
+    // it first. Not hardcoded "gateway": this migration also runs against
+    // CI's ephemeral gateway_test database.
+    const dbName = await currentDatabase(queryRunner);
+    await queryRunner.query(`GRANT CONNECT ON DATABASE "${dbName}" TO grafana_reader;`);
     await queryRunner.query(`GRANT USAGE ON SCHEMA public TO grafana_reader;`);
     await queryRunner.query(`GRANT SELECT ON ALL TABLES IN SCHEMA public TO grafana_reader;`);
     // So future migrations' new tables are auto-granted too, without a
@@ -43,10 +53,11 @@ export class AddGrafanaReaderRole1785295698907 implements MigrationInterface {
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
+    const dbName = await currentDatabase(queryRunner);
     await queryRunner.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE SELECT ON TABLES FROM grafana_reader;`);
     await queryRunner.query(`REVOKE SELECT ON ALL TABLES IN SCHEMA public FROM grafana_reader;`);
     await queryRunner.query(`REVOKE USAGE ON SCHEMA public FROM grafana_reader;`);
-    await queryRunner.query(`REVOKE CONNECT ON DATABASE gateway FROM grafana_reader;`);
+    await queryRunner.query(`REVOKE CONNECT ON DATABASE "${dbName}" FROM grafana_reader;`);
     await queryRunner.query(`DROP ROLE IF EXISTS grafana_reader;`);
   }
 }

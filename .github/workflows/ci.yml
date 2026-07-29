@@ -50,6 +50,9 @@ jobs:
           DATABASE_URL: postgresql://gateway:gateway@localhost:5432/gateway_test
           REDIS_URL: redis://localhost:6379
           ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY || '0000000000000000000000000000000000000000000000000000000000000000' }}
+          # Only used by the AddGrafanaReaderRole migration against this
+          # ephemeral test database -- never a real Grafana connection here.
+          GRAFANA_DB_PASSWORD: ${{ secrets.GRAFANA_DB_PASSWORD || 'ci_test_password_only' }}
           NODE_ENV: test
 
   build-push:
