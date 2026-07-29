@@ -175,6 +175,42 @@ export class PaymentsService {
     return this.chargeRepo.save(record);
   }
 
+  /**
+   * Records a charge attempt that the provider threw on (refused or
+   * unreachable) instead of returning a result for. Without this, the
+   * payment was left stuck at approved_risk forever: no provider_charges
+   * row, no refused transition, no trace beyond the provider's own log line.
+   */
+  async recordChargeFailure(
+    paymentId: string,
+    storeId: string,
+    method: 'pix' | 'boleto' | 'credit_card',
+    amount: number,
+    provider: string,
+    error: unknown,
+  ): Promise<void> {
+    const err = error as { response?: { status?: number; data?: unknown }; message?: string; code?: string };
+    const raw = {
+      message: err?.message,
+      code: err?.code,
+      status: err?.response?.status,
+      response: err?.response?.data,
+    };
+
+    await this.saveProviderCharge({
+      paymentId,
+      storeId,
+      provider,
+      providerId: null,
+      type: method === 'credit_card' ? 'authorization' : 'charge',
+      status: 'failed',
+      amount,
+      raw,
+    });
+
+    await this.transition(paymentId, storeId, PaymentStatus.REFUSED, provider, raw);
+  }
+
   async updatePaymentPixData(paymentId: string, storeId: string, data: { pixQrCode: string; pixQrCodeUrl: string; pixExpiresAt: Date }): Promise<void> {
     await this.paymentRepo.update({ id: paymentId, storeId }, data);
   }

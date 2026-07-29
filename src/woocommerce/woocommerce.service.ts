@@ -134,17 +134,25 @@ export class WooCommerceService {
     await this.paymentsService.transition(payment.id, store.id, PaymentStatus.APPROVED_RISK, 'koin_eval', fraudVerdict);
 
     const provider = this.providersService.getPaymentProvider(settings);
-    const chargeResult = await provider.createCharge({
-      referenceId: payment.id,
-      sellerId: settings.zoopSellerId ?? payload.sellerId,
-      method: payload.method,
-      amount: { amount: amountInCents, currency: 'BRL' },
-      token: payload.source?.tokenId,
-      installments: payload.installments,
-      capture: true,
-      customer,
-      description: payload.description,
-    });
+    let chargeResult: Awaited<ReturnType<typeof provider.createCharge>>;
+    try {
+      chargeResult = await provider.createCharge({
+        referenceId: payment.id,
+        sellerId: settings.zoopSellerId ?? payload.sellerId,
+        method: payload.method,
+        amount: { amount: amountInCents, currency: 'BRL' },
+        token: payload.source?.tokenId,
+        installments: payload.installments,
+        capture: true,
+        customer,
+        description: payload.description,
+      });
+    } catch (err) {
+      await this.paymentsService.recordChargeFailure(payment.id, store.id, payload.method, amountInCents, 'zoop', err);
+      const response = { error: { message: 'Pagamento não autorizado' } };
+      await this.idempotencyService.saveResponse(record.id, response);
+      return response;
+    }
 
     await this.paymentsService.saveProviderCharge({
       paymentId: payment.id,

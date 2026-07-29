@@ -201,21 +201,29 @@ export class WakeService {
     await this.paymentsService.transition(payment.id, store.id, PaymentStatus.APPROVED_RISK, 'koin_eval', fraudVerdict);
 
     const provider = this.providersService.getPaymentProvider(settings);
-    const chargeResult = await provider.createCharge({
-      referenceId: payment.id,
-      sellerId: settings.zoopSellerId ?? '',
-      method: method as 'pix' | 'boleto' | 'credit_card',
-      amount: { amount: payment.amount, currency: 'BRL' },
-      token: payload.pagamento.cartao?.token,
-      installments: payload.pagamento.parcelas,
-      capture: method !== 'credit_card',
-      customer: {
-        name: payload.usuario.nome,
-        document: payload.usuario.cpf ?? payload.usuario.cnpj ?? '',
-        email: payload.usuario.email,
-        phone: payload.usuario.telefone,
-      },
-    });
+    let chargeResult: Awaited<ReturnType<typeof provider.createCharge>>;
+    try {
+      chargeResult = await provider.createCharge({
+        referenceId: payment.id,
+        sellerId: settings.zoopSellerId ?? '',
+        method: method as 'pix' | 'boleto' | 'credit_card',
+        amount: { amount: payment.amount, currency: 'BRL' },
+        token: payload.pagamento.cartao?.token,
+        installments: payload.pagamento.parcelas,
+        capture: method !== 'credit_card',
+        customer: {
+          name: payload.usuario.nome,
+          document: payload.usuario.cpf ?? payload.usuario.cnpj ?? '',
+          email: payload.usuario.email,
+          phone: payload.usuario.telefone,
+        },
+      });
+    } catch (err) {
+      await this.paymentsService.recordChargeFailure(payment.id, store.id, method as 'pix' | 'boleto' | 'credit_card', payment.amount, 'zoop', err);
+      const response = { statusId: 2, mensagem: 'Pagamento não autorizado', transacao: payment.id };
+      await this.idempotencyService.saveResponse(record.id, response);
+      return response;
+    }
 
     await this.paymentsService.saveProviderCharge({
       paymentId: payment.id,
