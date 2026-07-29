@@ -19,9 +19,8 @@ async function bootstrap() {
   // rejected by a guard, which an interceptor would never see.
   app.use(requestLoggingMiddleware);
 
-  // Serve static assets (browser-only helpers + the admin risk-review page)
-  // under /public. The page itself is a static file; the data it shows comes
-  // from the AdminGuard-protected /v1/risk/evaluations endpoint.
+  // Serve browser-only static assets (e.g. tokenize.js, the client-side
+  // Zoop tokenization widget) under /public.
   app.useStaticAssets(join(__dirname, '..', 'public'), { prefix: '/public' });
 
   app.useGlobalFilters(new GlobalExceptionFilter());

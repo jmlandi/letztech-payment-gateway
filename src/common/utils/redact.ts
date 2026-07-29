@@ -4,9 +4,6 @@
  * A payment gateway's logs are a liability if they carry credentials, card
  * data or customer PII, so nothing reaches the logger unfiltered: outbound
  * provider payloads and remote error bodies are walked and scrubbed by key.
- *
- * Complements `mask-pii.ts`: masking is for a human reviewing a record in the
- * admin UI (partially readable), redaction is for log output (fully removed).
  */
 
 const REDACTED = '[REDACTED]';

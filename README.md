@@ -150,10 +150,11 @@ returned on the response) is assigned per request and carried through
 `AsyncLocalStorage`, so an inbound call and the Zoop calls it triggers share
 one id in the logs.
 
-Logs are structured JSON (pino, via `nestjs-pino`), one object per line, ready
-to ship to Loki/Datadog/CloudWatch. A pino `mixin` stamps `traceId` onto every
-line — including logs deep in a service that never sees the request — so
-`traceId=<id>` in your log tool returns the whole story of one transaction.
+Logs are structured JSON (pino, via `nestjs-pino`), one object per line,
+shipped to Loki by Promtail (see "Risk review, logs and metrics" below). A
+pino `mixin` stamps `traceId` onto every line — including logs deep in a
+service that never sees the request — so `traceId=<id>` in your log tool
+returns the whole story of one transaction.
 `LOG_LEVEL` overrides the default (`info` in production, `debug` elsewhere);
 outside production output is pretty-printed instead.
 
@@ -197,20 +198,46 @@ emitted log lines.
 
 ---
 
-## Risk review
+## Risk review, logs and metrics (Grafana)
 
-Read-only surface to inspect fraud evaluations, protected by the same
-`ADMIN_API_KEY` Bearer auth as the rest of `/v1/`.
+Fraud/risk review, log search and request/infra metrics all live behind one
+Grafana instance — not a bespoke admin page or endpoint. Grafana is
+**SSH-tunnel-only**, never exposed via Caddy:
 
-- **API:** `GET /v1/risk/evaluations` — filters: `store_id`, `status`
-  (`approved` / `denied` / `received`), `provider`, `min_score`, `from`,
-  `to` (ISO), `page`, `limit` (max 100). Joins each evaluation with its
-  payment. Customer PII (name, document, email, phone, IP) is **always
-  masked**; the raw provider payload is never returned by this route.
-- **Page:** `GET /public/risk.html` — mobile-friendly viewer for the same
-  data. The admin key is entered in-page and kept only in the tab's
-  `sessionStorage`. Static assets under `public/` are served via
-  `useStaticAssets` (see `src/main.ts`).
+```
+ssh -L 3001:localhost:3001 useradm@<vps-host>
+```
+
+then open `http://localhost:3001` (credentials in the VPS's `.env`,
+`GRAFANA_ADMIN_PASSWORD`).
+
+- **Dashboards → Risk Review** — two panels replicating the old risk-review
+  UI: "Declined Attempts / Card Testing" (reads `payments` directly, so it
+  has data even for stores with `fraudEnabled: false` — the WooCommerce
+  auto-provisioned default) and "Risk Evaluations" (reads `fraud_evaluations`
+  joined with `payments`, only populated for stores with fraud checks on).
+  Filterable by store, time range, status, method and thresholds via
+  dashboard variables.
+- **Explore** — ad hoc SQL against the read-only `Postgres` datasource
+  (role `grafana_reader`, `SELECT`-only, created by the
+  `AddGrafanaReaderRole` migration), or LogQL against `Loki` for searching
+  logs by `traceId`/`level`/`container` across deploys (previously lost on
+  every container recycle — logs only went to stdout).
+- **Metrics** — `Prometheus` scrapes the app's `/metrics` (request
+  duration/count by route and status — blocked from the public internet in
+  `caddy/Caddyfile`, only reachable over the internal docker network) and
+  `node-exporter` (host CPU/mem/disk). cAdvisor (per-container metrics) is
+  disabled by default — see the comment on its service in
+  `docker-compose.yml` if re-enabling it on a different host.
+
+New services aren't part of the CI/CD deploy script's `up -d app worker` —
+brought up once manually (`docker compose up -d loki promtail prometheus
+node-exporter grafana`) and left running via `restart: unless-stopped`.
+Config-file-only edits (the `loki/`, `promtail/`, `prometheus/`,
+`grafana/provisioning/` YAML) need a manual `docker compose up -d <service>`
+afterwards to take effect — a `git pull` alone doesn't reload a bind-mounted
+config file, the same reason Caddy's deploy step has an explicit `caddy
+reload` line.
 
 ---
 
