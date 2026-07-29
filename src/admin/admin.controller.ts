@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, NotImplementedException, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { PaymentsService } from '../payments/payments.service';
 import { StoresService } from '../stores/stores.service';
 import { StoreSettings } from '../stores/entities/store-settings.entity';
@@ -39,15 +39,18 @@ export class AdminController {
   }
 
   @Post('payments/:id/capture')
-  capturePayment(@Param('id') id: string, @Query('store_id') storeId: string, @Body() body: { amount?: number }) {
-    // TODO: delegate to payments service → Zoop capture
-    return { id, storeId, amount: body.amount };
+  capturePayment(): never {
+    // Not wired to the payments service → Zoop capture yet. Was a stub
+    // returning a fake success body since the first MVP commit; failing
+    // loudly is safer than a capture call that silently does nothing.
+    throw new NotImplementedException('Payment capture is not implemented yet');
   }
 
   @Post('payments/:id/cancel')
-  cancelPayment(@Param('id') id: string, @Query('store_id') storeId: string) {
-    // TODO: delegate to payments service → Zoop void/refund
-    return { id, storeId };
+  cancelPayment(): never {
+    // Not wired to the payments service → Zoop void/refund yet. Same
+    // reasoning as capturePayment above.
+    throw new NotImplementedException('Payment cancellation is not implemented yet');
   }
 
   // --- Risk review ---
