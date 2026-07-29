@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: app
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["app:3000"]
+
+  - job_name: node-exporter
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # Comment out (and remove from docker-compose.yml) if cAdvisor misbehaves
+  # on this host's kernel/cgroup setup — node-exporter + the app job above
+  # already cover host resources and request-level metrics, the two things
+  # that matter most. See docker-compose.yml's comment on the cadvisor service.
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]

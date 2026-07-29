@@ -1,0 +1,35 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+
+  - name: Postgres
+    uid: postgres-grafana-reader
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: gateway
+    user: grafana_reader
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    # $GRAFANA_DB_PASSWORD is expanded from the grafana service's own
+    # environment (docker-compose.yml) — a stable, documented Grafana
+    # provisioning feature. Goes under secureJsonData (encrypted at rest in
+    # Grafana's own db), never jsonData (stored plaintext). Same value the
+    # grafana_reader Postgres role is created with — see the migration in
+    # src/database/migrations/.
+    secureJsonData:
+      password: $GRAFANA_DB_PASSWORD

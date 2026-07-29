@@ -1,0 +1,111 @@
+{
+  "title": "Risk Review",
+  "uid": "risk-review",
+  "editable": false,
+  "schemaVersion": 39,
+  "timezone": "browser",
+  "time": { "from": "now-24h", "to": "now" },
+  "refresh": "",
+  "tags": ["risk", "fraud"],
+  "templating": {
+    "list": [
+      {
+        "name": "store_id",
+        "type": "query",
+        "label": "Store",
+        "datasource": { "type": "postgres", "uid": "postgres-grafana-reader" },
+        "query": "SELECT __value, __text FROM (SELECT '' AS __value, '(All stores)' AS __text, 0 AS sort_order UNION ALL SELECT id AS __value, name AS __text, 1 AS sort_order FROM stores) t ORDER BY sort_order, __text",
+        "refresh": 2,
+        "sort": 0,
+        "current": {}
+      },
+      {
+        "name": "status",
+        "type": "custom",
+        "label": "Evaluation status",
+        "query": "All,denied,approved,received",
+        "current": { "text": "All", "value": "All" }
+      },
+      {
+        "name": "min_score",
+        "type": "textbox",
+        "label": "Min score",
+        "query": "0",
+        "current": { "text": "0", "value": "0" }
+      },
+      {
+        "name": "method",
+        "type": "custom",
+        "label": "Method (declined attempts)",
+        "query": "credit_card,all,pix,boleto",
+        "current": { "text": "credit_card", "value": "credit_card" }
+      },
+      {
+        "name": "min_refused",
+        "type": "textbox",
+        "label": "Min refused (declined attempts)",
+        "query": "2",
+        "current": { "text": "2", "value": "2" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Declined Attempts / Card Testing",
+      "description": "Charge attempts grouped by customer document. Many attempts, mostly refused, small varied amounts in a short window is the card-testing signature. Reads payments directly, so it has data even for stores with fraudEnabled=false (WooCommerce auto-provisioned default).",
+      "type": "table",
+      "datasource": { "type": "postgres", "uid": "postgres-grafana-reader" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "refusal_rate" },
+            "properties": [
+              { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 40 },
+                    { "color": "red", "value": 70 }
+                  ]
+                }
+              },
+              { "id": "unit", "value": "percent" }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT p.customer->>'document' AS document,\n  MIN(p.customer->>'name') AS name,\n  MIN(p.customer->>'email') AS email,\n  COUNT(*)::int AS attempts,\n  COUNT(*) FILTER (WHERE p.status = 'refused')::int AS refused,\n  ROUND(100.0 * COUNT(*) FILTER (WHERE p.status = 'refused') / COUNT(*), 0) AS refusal_rate,\n  COUNT(DISTINCT p.amount)::int AS distinct_amounts,\n  MIN(p.amount)::int AS min_amount,\n  MAX(p.amount)::int AS max_amount,\n  MIN(p.created_at) AS first_at,\n  MAX(p.created_at) AS last_at,\n  ROUND(EXTRACT(EPOCH FROM (MAX(p.created_at) - MIN(p.created_at)))/60) AS span_minutes,\n  (ARRAY_AGG(p.id ORDER BY p.created_at DESC))[1:5] AS sample_payment_ids\nFROM payments p\nWHERE p.created_at BETWEEN $__timeFrom() AND $__timeTo()\n  AND p.customer->>'document' IS NOT NULL\n  AND ('$store_id' = '' OR p.store_id = '$store_id')\n  AND ('$method' = 'all' OR p.method = '$method')\nGROUP BY 1\nHAVING COUNT(*) FILTER (WHERE p.status = 'refused') >= $min_refused\nORDER BY refused DESC, attempts DESC\nLIMIT 100;"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Risk Evaluations",
+      "description": "Fraud evaluations (Koin) joined with their payment. Only has data for stores with fraudEnabled=true — WooCommerce auto-provisioned stores default to fraudEnabled=false, so this stays empty for them (see the Declined Attempts panel above instead).",
+      "type": "table",
+      "datasource": { "type": "postgres", "uid": "postgres-grafana-reader" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 10 },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT fe.provider, fe.status, fe.score, fe.type, fe.created_at AS \"createdAt\",\n  p.amount, p.currency, p.method, p.status AS payment_status, p.external_ref,\n  p.customer->>'name' AS customer_name,\n  p.customer->>'document' AS customer_document,\n  p.customer->>'email' AS customer_email,\n  p.customer->>'phone' AS customer_phone,\n  fe.payment_id AS \"paymentId\"\nFROM fraud_evaluations fe\nJOIN payments p ON p.id = fe.payment_id\nWHERE fe.created_at BETWEEN $__timeFrom() AND $__timeTo()\n  AND ('$store_id' = '' OR fe.store_id = '$store_id')\n  AND ('$status' = 'All' OR fe.status = '$status')\n  AND fe.score >= $min_score\nORDER BY fe.created_at DESC\nLIMIT 200;"
+        }
+      ]
+    }
+  ]
+}

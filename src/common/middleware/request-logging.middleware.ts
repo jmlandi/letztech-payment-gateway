@@ -3,6 +3,7 @@ import { NextFunction, Request, Response } from 'express';
 import { ulid } from 'ulid';
 import { runWithContext } from '../context/request-context';
 import { isSensitiveKey } from '../utils/redact';
+import { recordHttpMetrics } from '../../metrics/metrics.registry';
 
 const logger = new Logger('HTTP');
 
@@ -11,8 +12,11 @@ const logger = new Logger('HTTP');
  * on both the app and worker containers, which would bury real traffic under
  * thousands of empty lines a day. A failing probe still logs — that is signal.
  * Must match HealthController's route (`@Controller('healthz')`).
+ *
+ * /metrics is the same story once Prometheus starts scraping it every 15s —
+ * must match MetricsController's route (`@Controller('metrics')`).
  */
-const QUIET_PATHS = new Set(['/healthz']);
+const QUIET_PATHS = new Set(['/healthz', '/metrics']);
 
 /** Query values are logged by key only when the key is not sensitive. */
 function summarizeQuery(query: Request['query']): Record<string, unknown> | undefined {
@@ -45,9 +49,21 @@ export function requestLoggingMiddleware(req: Request, res: Response, next: Next
   const startedAt = process.hrtime.bigint();
 
   res.on('finish', () => {
+    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+
+    // req.route.path is the matched route *pattern* (e.g. /v1/payments/:id),
+    // not the raw path — using the raw path here would make every ULID
+    // payment id its own Prometheus time series. Same reasoning as
+    // normalizeZoopPath in ../utils/redact.ts.
+    recordHttpMetrics({
+      method: req.method,
+      route: req.route?.path ?? 'unmatched',
+      status: res.statusCode,
+      durationMs: Math.round(durationMs),
+    });
+
     if (QUIET_PATHS.has(req.path) && res.statusCode < 400) return;
 
-    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
     const payload = {
       traceId,
       method: req.method,

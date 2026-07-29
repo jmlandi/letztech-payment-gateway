@@ -30,6 +30,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { AdminModule } from './admin/admin.module';
 import { HealthModule } from './health/health.module';
+import { MetricsModule } from './metrics/metrics.module';
 
 const ENTITIES = [
   Store, StoreCredentials, StoreSettings,
@@ -71,6 +72,7 @@ const ENTITIES = [
     WebhooksModule,
     AdminModule,
     HealthModule,
+    MetricsModule,
   ],
 })
 export class AppModule {}

@@ -1,0 +1,53 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          - name: label
+            values: ["com.docker.compose.project=letztech-gateway"]
+    relabel_configs:
+      # Docker container names carry a leading slash (e.g. "/letztech-gateway-app-1").
+      - source_labels: [__meta_docker_container_name]
+        regex: '/(.*)'
+        target_label: container
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: service
+    pipeline_stages:
+      # Unwraps Docker's json-file envelope ({"log","stream","time"}) to get
+      # at the actual line the container wrote.
+      - docker: {}
+      # Only app/worker emit pino JSON; postgres/redis/caddy write plain
+      # text. A failed json-stage parse doesn't drop the line — it just
+      # ships through unextracted, which is the correct fallback here.
+      - json:
+          expressions:
+            level: level
+            traceId: traceId
+            method: method
+            path: path
+            status: status
+            durationMs: durationMs
+      # Only low-cardinality fields become real Loki labels — each distinct
+      # label value creates a separate index stream.
+      - labels:
+          level:
+      # traceId is a fresh ULID per request; making it a label would create
+      # unbounded index streams. Structured metadata keeps it queryable
+      # (`| traceId="01H..."` in LogQL) without indexing it.
+      - structured_metadata:
+          traceId:
+          method:
+          path:
+          status:
+          durationMs:

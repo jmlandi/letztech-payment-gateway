@@ -1,7 +1,20 @@
 pay.letstech.com.br {
-  reverse_proxy app:3000
+	# /metrics is for Prometheus, which reaches app:3000 directly over the
+	# docker network — reverse_proxy has no path filter otherwise, so without
+	# this it would be publicly reachable at pay.letstech.com.br/metrics.
+	handle /metrics {
+		respond 404
+	}
+	handle {
+		reverse_proxy app:3000
+	}
 }
 
 api.letstech.com.br {
-  reverse_proxy app:3000
+	handle /metrics {
+		respond 404
+	}
+	handle {
+		reverse_proxy app:3000
+	}
 }

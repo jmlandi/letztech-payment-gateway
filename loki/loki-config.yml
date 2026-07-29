@@ -1,0 +1,43 @@
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # Structured metadata (traceId, path, status, durationMs — see
+  # promtail-config.yml) needs schema v13 + this flag.
+  allow_structured_metadata: true
+  # 30 days: 80GB disk, near-zero current log volume. This is hardcoded
+  # rather than env-driven — Loki's -config.expand-env has no
+  # default-fallback syntax, so an env var here would always have to be set
+  # or the config breaks. Edit directly if the retention need changes; that
+  # already requires a manual `docker compose up -d loki` to take effect
+  # (bind-mounted config, not picked up by a plain git pull/reset).
+  retention_period: 720h
+
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true
+  delete_request_store: filesystem

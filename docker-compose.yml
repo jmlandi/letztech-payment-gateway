@@ -76,8 +76,109 @@ services:
       timeout: 5s
       retries: 5
 
+  # --- Observability ---
+  # Not part of the CI/CD deploy script's `up -d app worker` — brought up
+  # once manually and left running via restart: unless-stopped. A `git pull`
+  # + this file changing is enough to pick up a new/changed *service*, but
+  # edits to the bind-mounted config files below (loki/promtail/prometheus
+  # yaml, grafana/provisioning) need a manual
+  # `docker compose up -d <service>` afterwards to actually take effect —
+  # same limitation Caddy already has, which is why its deploy step has an
+  # explicit `caddy reload` line. See docker-compose.override.yml for the
+  # other example of this repo documenting a deploy-script gap this way.
+
+  loki:
+    image: grafana/loki:3.1.1
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+
+  promtail:
+    image: grafana/promtail:3.1.1
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail_positions:/tmp
+    depends_on:
+      - loki
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+
+  # cAdvisor has a history of cgroup-v2 mount quirks on some kernels. After
+  # bringing it up: `docker compose logs cadvisor` (no repeating errors) and
+  # `curl -s localhost:8080/metrics | grep container_cpu_usage_seconds_total`
+  # (real values). If it misbehaves, comment this whole service out and drop
+  # its prometheus.yml scrape job — node-exporter + the app's own /metrics
+  # already cover host resources and request-level metrics, the two things
+  # that matter most here. Per-container granularity is what's lost.
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    restart: unless-stopped
+    # Loopback-only — never "3001:3000", which binds 0.0.0.0 and would put
+    # Grafana on the public internet. Reached via
+    # `ssh -L 3001:localhost:3001 useradm@189.90.139.194`, then
+    # http://localhost:3001. No Caddy site block, no public subdomain.
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      # Consumed by datasources.yml's $GRAFANA_DB_PASSWORD expansion — same
+      # value the grafana_reader migration creates the Postgres role with.
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+
 volumes:
   caddy_data:
   caddy_config:
   pg_data:
   redis_data:
+  loki_data:
+  promtail_positions:
+  prometheus_data:
+  grafana_data:

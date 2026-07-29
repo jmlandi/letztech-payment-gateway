@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: risk-review
+    folder: Risk Review
+    type: file
+    # Dashboard-as-code stays authoritative — a manual UI edit wouldn't
+    # survive a container restart anyway, since this reads from the
+    # read-only /etc/grafana/dashboards mount every time.
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards
