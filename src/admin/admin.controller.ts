@@ -1,7 +1,6 @@
 import { Body, Controller, Get, NotImplementedException, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { PaymentsService } from '../payments/payments.service';
-import { StoresService } from '../stores/stores.service';
-import { StoreSettings } from '../stores/entities/store-settings.entity';
+import { StoresService, UpdateStoreSettingsInput } from '../stores/stores.service';
 import { AdminGuard } from './admin.guard';
 
 @Controller('v1')
@@ -65,10 +64,7 @@ export class AdminController {
   }
 
   @Patch('stores/:id/settings')
-  updateSettings(
-    @Param('id') id: string,
-    @Body() body: Partial<Pick<StoreSettings, 'fraudEnabled' | 'koinPrivateKeyEncrypted' | 'zoopSellerId' | 'enabledMethods'>>,
-  ) {
+  updateSettings(@Param('id') id: string, @Body() body: UpdateStoreSettingsInput) {
     return this.storesService.updateSettings(id, body);
   }
 

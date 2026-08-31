@@ -8,10 +8,16 @@ import { StoreSettings } from './entities/store-settings.entity';
 import { generateId } from '../common/utils/id';
 import { slugify } from '../common/utils/slug';
 import { ProvidersService } from '../providers/providers.service';
+import { RiskService } from '../risk/risk.service';
 
 export interface ResolvedStore {
   store: Store;
   settings: StoreSettings;
+}
+
+export interface UpdateStoreSettingsInput extends Partial<Pick<StoreSettings, 'fraudEnabled' | 'zoopSellerId' | 'enabledMethods'>> {
+  /** Plaintext Koin private key. Encrypted before persisting; never stored or logged as-is. */
+  koinPrivateKey?: string;
 }
 
 @Injectable()
@@ -21,6 +27,7 @@ export class StoresService {
     @InjectRepository(StoreCredentials) private readonly credsRepo: Repository<StoreCredentials>,
     @InjectRepository(StoreSettings) private readonly settingsRepo: Repository<StoreSettings>,
     private readonly providersService: ProvidersService,
+    private readonly riskService: RiskService,
   ) {}
 
   async resolveByWakeHeaders(wakeStoreHeader: string, apiKey: string): Promise<ResolvedStore> {
@@ -110,10 +117,12 @@ export class StoresService {
     return { store, apiKey, hmacSecret };
   }
 
-  async updateSettings(storeId: string, patch: Partial<Pick<StoreSettings, 'fraudEnabled' | 'koinPrivateKeyEncrypted' | 'zoopSellerId' | 'enabledMethods'>>): Promise<StoreSettings> {
+  async updateSettings(storeId: string, patch: UpdateStoreSettingsInput): Promise<StoreSettings> {
     const settings = await this.settingsRepo.findOneOrFail({ where: { storeId } });
     if (patch.zoopSellerId) await this.assertSellerExists(patch.zoopSellerId);
-    Object.assign(settings, patch);
+    const { koinPrivateKey, ...rest } = patch;
+    Object.assign(settings, rest);
+    if (koinPrivateKey) settings.koinPrivateKeyEncrypted = this.riskService.encryptKoinKey(koinPrivateKey);
     return this.settingsRepo.save(settings);
   }
 
