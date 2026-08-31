@@ -5,6 +5,14 @@ import { FraudContext, FraudProvider, FraudVerdict, TxOutcome } from '../../../d
 const SANDBOX_BASE = 'https://api-sandbox.koin.com.br/v1';
 const PROD_BASE = 'https://api.koin.com.br/v1';
 
+// Koin has no dedicated Boleto value; Asynchronous is the closest documented
+// method for an offline/delayed settlement instrument.
+const PAYMENT_METHOD_MAP: Record<string, string> = {
+  credit_card: 'CreditCard',
+  pix: 'Pix',
+  boleto: 'Asynchronous',
+};
+
 export class KoinFraudAdapter implements FraudProvider {
   private readonly logger = new Logger(KoinFraudAdapter.name);
   private readonly http: AxiosInstance;
@@ -29,41 +37,79 @@ export class KoinFraudAdapter implements FraudProvider {
     return mapVerdict(res.data);
   }
 
+  /** `referenceId` here is our own reference_id (payment.id), not Koin's evaluation_id. */
   async checkStatus(referenceId: string): Promise<FraudVerdict> {
-    const res = await this.http.get(`/antifraud/evaluations/${referenceId}`);
+    const res = await this.http.get(`/antifraud/evaluations/${referenceId}`, { params: { field: 'REFERENCE_ID' } });
     return mapVerdict(res.data);
   }
 
   async notifyOutcome(referenceId: string, outcome: TxOutcome): Promise<void> {
-    await this.http.patch(`/antifraud/notifications/${referenceId}`, { outcome }).catch((err: unknown) => {
-      this.logger.warn({ referenceId, outcome, err }, 'Koin outcome notification failed (non-critical)');
-    });
+    await this.http
+      .patch(`/antifraud/notifications/${referenceId}`, { outcome }, { params: { field: 'REFERENCE_ID' } })
+      .catch((err: unknown) => {
+        this.logger.warn({ referenceId, outcome, err }, 'Koin outcome notification failed (non-critical)');
+      });
   }
+}
+
+/** Koin's `value` fields are decimal amounts in the currency's major unit (reais), not cents. */
+function toMajorUnit(cents: number): number {
+  return Math.round(cents) / 100;
+}
+
+function money(currency: string, cents: number): { currency: string; value: number } {
+  return { currency, value: toMajorUnit(cents) };
+}
+
+function documentType(document: string): 'CPF' | 'CNPJ' {
+  return document.replace(/\D/g, '').length > 11 ? 'CNPJ' : 'CPF';
 }
 
 function buildKoinPayload(ctx: FraudContext): Record<string, unknown> {
   return {
-    reference_id: ctx.referenceId,
-    order_id: ctx.orderId,
-    amount: ctx.amount,
-    currency: ctx.currency,
-    fingerprint_id: ctx.fingerprintId,
-    callback_url: ctx.callbackUrl,
-    customer: {
-      name: ctx.customer.name,
-      document: ctx.customer.document,
+    type: 'Ecommerce',
+    buyer: {
+      full_name: ctx.customer.name,
       email: ctx.customer.email,
-      phone: ctx.customer.phone,
-      ip: ctx.customer.ip,
-      address: ctx.customer.address,
+      document: {
+        type: documentType(ctx.customer.document),
+        number: ctx.customer.document,
+      },
+      phone: ctx.customer.phone ? { number: ctx.customer.phone } : undefined,
+      address: ctx.customer.address
+        ? {
+            street: ctx.customer.address.line1,
+            city: ctx.customer.address.city,
+            state: ctx.customer.address.state,
+            zip_code: ctx.customer.address.postal_code,
+            country_code: ctx.customer.address.country ?? 'BR',
+          }
+        : undefined,
     },
+    device: ctx.customer.ip ? { ipv4: ctx.customer.ip, session_id: ctx.fingerprintId } : undefined,
+    store: ctx.storeCode ? { code: ctx.storeCode } : undefined,
     items: ctx.items.map((i) => ({
-      sku: i.sku,
+      type: 'Generic',
+      id: i.sku,
       name: i.name,
+      price: money(ctx.currency, i.unitAmount),
       quantity: i.quantity,
-      unit_amount: i.unitAmount,
     })),
-    shipping_amount: ctx.shippingAmount,
+    payments: [
+      {
+        method: PAYMENT_METHOD_MAP[ctx.method] ?? 'CreditCard',
+        amount: money(ctx.currency, ctx.amount),
+        installments: ctx.method === 'credit_card' ? (ctx.installments ?? 1) : undefined,
+        details: ctx.card?.brand ? { brand_name: ctx.card.brand } : undefined,
+      },
+    ],
+    shipping: ctx.shippingAmount ? { price: money(ctx.currency, ctx.shippingAmount) } : undefined,
+    transaction: {
+      reference_id: ctx.referenceId,
+      country_code: 'BR',
+      total_amount: money(ctx.currency, ctx.amount),
+    },
+    callback_url: ctx.callbackUrl,
   };
 }
 

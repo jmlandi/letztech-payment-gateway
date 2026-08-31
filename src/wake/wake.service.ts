@@ -126,6 +126,10 @@ export class WakeService {
       orderId: payload.pedido,
       amount: payment.amount,
       currency: 'BRL',
+      method,
+      installments: payload.pagamento.parcelas,
+      storeCode: settings.koinStoreCode ?? undefined,
+      card: payload.pagamento.cartao ? { brand: payload.pagamento.cartao.bandeira } : undefined,
       fingerprintId: payload.pagamento.fraudId,
       customer: {
         name: payload.usuario.nome,

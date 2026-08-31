@@ -15,7 +15,7 @@ export interface ResolvedStore {
   settings: StoreSettings;
 }
 
-export interface UpdateStoreSettingsInput extends Partial<Pick<StoreSettings, 'fraudEnabled' | 'zoopSellerId' | 'enabledMethods'>> {
+export interface UpdateStoreSettingsInput extends Partial<Pick<StoreSettings, 'fraudEnabled' | 'zoopSellerId' | 'enabledMethods' | 'koinStoreCode'>> {
   /** Plaintext Koin private key. Encrypted before persisting; never stored or logged as-is. */
   koinPrivateKey?: string;
 }

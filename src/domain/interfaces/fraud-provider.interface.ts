@@ -12,6 +12,12 @@ export interface FraudContext {
   orderId: string;
   amount: number;
   currency: string;
+  method: string;
+  installments?: number;
+  storeCode?: string;
+  card?: {
+    brand?: string;
+  };
   fingerprintId?: string;
   customer: {
     name: string;

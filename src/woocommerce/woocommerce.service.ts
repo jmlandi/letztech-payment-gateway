@@ -105,6 +105,7 @@ export class WooCommerceService {
       orderId: payload.orderId,
       amount: amountInCents,
       currency: 'BRL',
+      method: payload.method,
       customer,
       items: [],
     });

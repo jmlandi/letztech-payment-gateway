@@ -15,6 +15,9 @@ export class StoreSettings {
   @Column({ name: 'koin_private_key_encrypted', type: 'text', nullable: true })
   koinPrivateKeyEncrypted: string | null;
 
+  @Column({ name: 'koin_store_code', type: 'varchar', length: 255, nullable: true })
+  koinStoreCode: string | null;
+
   @Column({ name: 'zoop_seller_id', type: 'varchar', length: 255, nullable: true })
   zoopSellerId: string | null;
 
