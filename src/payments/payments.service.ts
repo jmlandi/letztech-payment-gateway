@@ -56,6 +56,9 @@ export class PaymentsService {
     return this.paymentRepo.save(payment);
   }
 
+  /** Pass '*' as storeId when the caller (e.g. a provider webhook) doesn't carry
+   * our internal store scoping -- the payment's own store_id is used for the
+   * resulting event/outbox rows instead of the literal '*'. */
   async transition(
     paymentId: string,
     storeId: string,
@@ -64,25 +67,27 @@ export class PaymentsService {
     raw?: unknown,
   ): Promise<Payment> {
     return this.dataSource.transaction(async (manager) => {
-      const payment = await manager
+      const qb = manager
         .getRepository(Payment)
         .createQueryBuilder('p')
         .setLock('pessimistic_write')
-        .where('p.id = :id AND p.store_id = :storeId', { id: paymentId, storeId })
-        .getOne();
+        .where('p.id = :id', { id: paymentId });
+      if (storeId !== '*') qb.andWhere('p.store_id = :storeId', { storeId });
+      const payment = await qb.getOne();
 
       if (!payment) throw new NotFoundException({ error: { code: 'not_found', message: 'Payment not found' } });
 
       PaymentStateMachine.validate(payment.status, toStatus);
 
       const fromStatus = payment.status;
+      const resolvedStoreId = payment.storeId;
       payment.status = toStatus;
       await manager.save(Payment, payment);
 
       const event = manager.getRepository(PaymentEvent).create({
         id: generateId('evt'),
         paymentId,
-        storeId,
+        storeId: resolvedStoreId,
         type: `payment.${toStatus}`,
         fromStatus,
         toStatus,
@@ -95,7 +100,7 @@ export class PaymentsService {
         id: generateId('obx'),
         eventType: `payment.${toStatus}`,
         aggregateId: paymentId,
-        storeId,
+        storeId: resolvedStoreId,
         payload: {
           payment: {
             id: payment.id,
