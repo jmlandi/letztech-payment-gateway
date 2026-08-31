@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
-import { FraudContext, FraudProvider, FraudVerdict, TxOutcome } from '../../../domain/interfaces/fraud-provider.interface';
+import { FraudContext, FraudOutcomeNotification, FraudProvider, FraudVerdict } from '../../../domain/interfaces/fraud-provider.interface';
 
 const SANDBOX_BASE = 'https://api-sandbox.koin.com.br/v1';
 const PROD_BASE = 'https://api.koin.com.br/v1';
@@ -43,12 +43,46 @@ export class KoinFraudAdapter implements FraudProvider {
     return mapVerdict(res.data);
   }
 
-  async notifyOutcome(referenceId: string, outcome: TxOutcome): Promise<void> {
+  async notifyOutcome(referenceId: string, notification: FraudOutcomeNotification): Promise<void> {
+    const body = buildNotificationPayload(notification);
     await this.http
-      .patch(`/antifraud/notifications/${referenceId}`, { outcome }, { params: { field: 'REFERENCE_ID' } })
+      .patch(`/antifraud/notifications/${referenceId}`, body, { params: { field: 'REFERENCE_ID' } })
       .catch((err: unknown) => {
-        this.logger.warn({ referenceId, outcome, err }, 'Koin outcome notification failed (non-critical)');
+        this.logger.warn({ referenceId, notification, err }, 'Koin outcome notification failed (non-critical)');
       });
+  }
+}
+
+const CANCEL_REASON_MAP: Record<Extract<FraudOutcomeNotification, { kind: 'cancelled' }>['reason'], string> = {
+  requested_by_customer: 'REQUESTED_BY_CUSTOMER',
+  collect_error: 'COLLECT_ERROR',
+  requested_by_commerce: 'REQUESTED_BY_COMMERCE',
+};
+
+function buildNotificationPayload(notification: FraudOutcomeNotification): Record<string, unknown> {
+  const notification_date = new Date().toISOString();
+  switch (notification.kind) {
+    case 'collected':
+      return {
+        type: 'STATUS',
+        sub_type: 'COLLECTED',
+        authorization_code: notification.authorizationCode,
+        payment_id: notification.paymentId,
+        notification_date,
+      };
+    case 'not_collected':
+      return { type: 'STATUS', sub_type: 'NOT_COLLECTED', message: notification.message, notification_date };
+    case 'finalized':
+      return { type: 'STATUS', sub_type: 'FINALIZED', notification_date };
+    case 'cancelled':
+      return { type: 'STATUS', sub_type: 'CANCELLED', reason: CANCEL_REASON_MAP[notification.reason], notification_date };
+    case 'refunded':
+      return {
+        type: 'REFUND',
+        full: notification.full,
+        amount: notification.amountCents !== undefined ? toMajorUnit(notification.amountCents) : undefined,
+        notification_date,
+      };
   }
 }
 

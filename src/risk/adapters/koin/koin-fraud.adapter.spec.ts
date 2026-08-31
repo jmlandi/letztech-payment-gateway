@@ -76,3 +76,36 @@ describe('KoinFraudAdapter payload', () => {
     expect(sentParams).toEqual({ field: 'REFERENCE_ID' });
   });
 });
+
+describe('KoinFraudAdapter.notifyOutcome', () => {
+  async function capture(notification: Parameters<KoinFraudAdapter['notifyOutcome']>[1]) {
+    let sentUrl = '';
+    let sentParams: any;
+    let sentBody: any;
+    const adapter = buildAdapter(async (config) => {
+      sentUrl = config.url ?? '';
+      sentParams = config.params;
+      sentBody = JSON.parse(config.data as string);
+      return { data: {}, status: 200, statusText: 'OK', headers: {}, config };
+    });
+    await adapter.notifyOutcome('pay_01HZ', notification);
+    return { sentUrl, sentParams, sentBody };
+  }
+
+  it('sends STATUS/COLLECTED by our own reference_id', async () => {
+    const { sentUrl, sentParams, sentBody } = await capture({ kind: 'collected', authorizationCode: '123456' });
+    expect(sentUrl).toBe('/antifraud/notifications/pay_01HZ');
+    expect(sentParams).toEqual({ field: 'REFERENCE_ID' });
+    expect(sentBody).toMatchObject({ type: 'STATUS', sub_type: 'COLLECTED', authorization_code: '123456' });
+  });
+
+  it('sends STATUS/CANCELLED with the reason in Koin\'s uppercase enum', async () => {
+    const { sentBody } = await capture({ kind: 'cancelled', reason: 'requested_by_customer' });
+    expect(sentBody).toMatchObject({ type: 'STATUS', sub_type: 'CANCELLED', reason: 'REQUESTED_BY_CUSTOMER' });
+  });
+
+  it('sends a REFUND with amount converted to decimal reais', async () => {
+    const { sentBody } = await capture({ kind: 'refunded', full: false, amountCents: 2500 });
+    expect(sentBody).toMatchObject({ type: 'REFUND', full: false, amount: 25 });
+  });
+});

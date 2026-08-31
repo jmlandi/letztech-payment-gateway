@@ -126,6 +126,10 @@ export class StoresService {
     return this.settingsRepo.save(settings);
   }
 
+  async getSettings(storeId: string): Promise<StoreSettings> {
+    return this.settingsRepo.findOneOrFail({ where: { storeId } });
+  }
+
   async findById(id: string): Promise<Store> {
     const store = await this.storeRepo.findOne({ where: { id } });
     if (!store) throw new NotFoundException({ error: { code: 'not_found', message: 'Store not found' } });

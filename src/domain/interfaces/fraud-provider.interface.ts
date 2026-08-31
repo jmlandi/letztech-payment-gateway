@@ -5,7 +5,12 @@ export type FraudVerdict = {
   raw: unknown;
 };
 
-export type TxOutcome = 'captured' | 'refused' | 'cancelled';
+export type FraudOutcomeNotification =
+  | { kind: 'collected'; authorizationCode?: string; paymentId?: string }
+  | { kind: 'not_collected'; message?: string }
+  | { kind: 'finalized' }
+  | { kind: 'cancelled'; reason: 'requested_by_customer' | 'collect_error' | 'requested_by_commerce' }
+  | { kind: 'refunded'; full: boolean; amountCents?: number };
 
 export interface FraudContext {
   referenceId: string;
@@ -47,5 +52,5 @@ export interface FraudProvider {
   preEvaluate?(ctx: FraudContext): Promise<FraudVerdict>;
   evaluate(ctx: FraudContext): Promise<FraudVerdict>;
   checkStatus(referenceId: string): Promise<FraudVerdict>;
-  notifyOutcome?(referenceId: string, outcome: TxOutcome): Promise<void>;
+  notifyOutcome?(referenceId: string, notification: FraudOutcomeNotification): Promise<void>;
 }

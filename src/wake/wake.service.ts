@@ -171,6 +171,7 @@ export class WakeService {
       }
       if (preVerdict?.status === 'denied') {
         await this.paymentsService.transition(payment.id, store.id, PaymentStatus.REFUSED, 'koin_pre_eval', preVerdict);
+        await this.riskService.notify(settings, payment.id, { kind: 'cancelled', reason: 'requested_by_commerce' });
         const response = { statusId: 5, mensagem: 'Pagamento recusado pela análise de risco', transacao: payment.id };
         await this.idempotencyService.saveResponse(record.id, response);
         return response;
@@ -190,6 +191,7 @@ export class WakeService {
 
     if (fraudVerdict.status === 'denied') {
       await this.paymentsService.transition(payment.id, store.id, PaymentStatus.REFUSED, 'koin_eval', fraudVerdict);
+      await this.riskService.notify(settings, payment.id, { kind: 'cancelled', reason: 'requested_by_commerce' });
       const response = { statusId: 5, mensagem: 'Pagamento recusado pela análise de risco', transacao: payment.id };
       await this.idempotencyService.saveResponse(record.id, response);
       return response;
@@ -289,6 +291,10 @@ export class WakeService {
     const amount = payload.valor ? { amount: Math.round(payload.valor * 100), currency: 'BRL' } : undefined;
     await provider.capture(lastCharge.providerId, amount);
     await this.paymentsService.transition(payment.id, store.id, PaymentStatus.CAPTURED, 'wake_capture');
+    if (settings.fraudEnabled) {
+      await this.riskService.notify(settings, payment.id, { kind: 'collected', authorizationCode: lastCharge.providerId });
+      await this.riskService.notify(settings, payment.id, { kind: 'finalized' });
+    }
     return { statusId: 1, transacao: payment.id };
   }
 
@@ -303,10 +309,20 @@ export class WakeService {
     if (payment.status === PaymentStatus.AUTHORIZED) {
       await provider.void(lastCharge.providerId);
       await this.paymentsService.transition(payment.id, store.id, PaymentStatus.CANCELLED, 'wake_cancel');
+      if (settings.fraudEnabled) {
+        await this.riskService.notify(settings, payment.id, { kind: 'cancelled', reason: 'requested_by_customer' });
+      }
     } else {
       const amount = payload.valor ? { amount: Math.round(payload.valor * 100), currency: 'BRL' } : undefined;
       await provider.refund(lastCharge.providerId, amount);
       await this.paymentsService.transition(payment.id, store.id, PaymentStatus.REFUNDED, 'wake_cancel');
+      if (settings.fraudEnabled) {
+        await this.riskService.notify(settings, payment.id, {
+          kind: 'refunded',
+          full: !payload.valor,
+          amountCents: amount?.amount,
+        });
+      }
     }
 
     return { statusId: 1, transacao: payment.id };

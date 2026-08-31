@@ -1,4 +1,4 @@
-import { FraudContext, FraudProvider, FraudVerdict, TxOutcome } from '../../../domain/interfaces/fraud-provider.interface';
+import { FraudContext, FraudOutcomeNotification, FraudProvider, FraudVerdict } from '../../../domain/interfaces/fraud-provider.interface';
 
 export class NoopFraudProvider implements FraudProvider {
   async evaluate(_ctx: FraudContext): Promise<FraudVerdict> {
@@ -9,7 +9,7 @@ export class NoopFraudProvider implements FraudProvider {
     return { status: 'approved', score: 0, raw: null };
   }
 
-  async notifyOutcome(_referenceId: string, _outcome: TxOutcome): Promise<void> {
+  async notifyOutcome(_referenceId: string, _notification: FraudOutcomeNotification): Promise<void> {
     // no-op
   }
 }

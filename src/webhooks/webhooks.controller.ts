@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { PaymentsService } from '../payments/payments.service';
 import { PaymentStatus } from '../domain/state-machine/allowed-transitions';
 import { OutboxEvent } from '../outbox/entities/outbox.entity';
+import { StoresService } from '../stores/stores.service';
+import { RiskService } from '../risk/risk.service';
 
 // Zoop webhook event types → payment status mapping
 const ZOOP_STATUS_MAP: Record<string, PaymentStatus | null> = {
@@ -24,6 +26,8 @@ export class WebhooksController {
 
   constructor(
     private readonly paymentsService: PaymentsService,
+    private readonly storesService: StoresService,
+    private readonly riskService: RiskService,
     @InjectRepository(OutboxEvent) private readonly outboxRepo: Repository<OutboxEvent>,
   ) {}
 
@@ -78,7 +82,15 @@ export class WebhooksController {
     if (!targetStatus) return { ok: true };
 
     try {
-      await this.paymentsService.transition(referenceId, '*', targetStatus, 'koin_webhook', body);
+      // Only reached for evaluations Koin resolved asynchronously (previously
+      // "received"/under manual review) -- automatic approve/deny happens
+      // synchronously in WakeService and never calls back here.
+      const payment = await this.paymentsService.transition(referenceId, '*', targetStatus, 'koin_webhook', body);
+      if (status === 'denied') {
+        const settings = await this.storesService.getSettings(payment.storeId);
+        await this.riskService.notify(settings, referenceId, { kind: 'not_collected' });
+        await this.riskService.notify(settings, referenceId, { kind: 'cancelled', reason: 'requested_by_commerce' });
+      }
     } catch (err) {
       this.logger.warn({ evaluationId, err }, 'Koin webhook state transition failed');
     }

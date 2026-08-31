@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
-import { FraudContext, FraudProvider, FraudVerdict } from '../domain/interfaces/fraud-provider.interface';
+import { FraudContext, FraudOutcomeNotification, FraudProvider, FraudVerdict } from '../domain/interfaces/fraud-provider.interface';
 import { KoinFraudAdapter } from './adapters/koin/koin-fraud.adapter';
 import { NoopFraudProvider } from './adapters/noop/noop-fraud.adapter';
 import { StoreSettings } from '../stores/entities/store-settings.entity';
@@ -49,6 +49,11 @@ export class RiskService {
   async checkStatus(settings: StoreSettings, referenceId: string): Promise<FraudVerdict> {
     const provider = this.getProvider(settings);
     return provider.checkStatus(referenceId);
+  }
+
+  async notify(settings: StoreSettings, referenceId: string, notification: FraudOutcomeNotification): Promise<void> {
+    const provider = this.getProvider(settings);
+    await provider.notifyOutcome?.(referenceId, notification);
   }
 
   private decryptKoinKey(encrypted: string): string {
