@@ -32,6 +32,7 @@ import { AdminModule } from './admin/admin.module';
 import { HealthModule } from './health/health.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { HomologModule } from './homolog/homolog.module';
+import { DocsModule } from './docs/docs.module';
 
 const ENTITIES = [
   Store, StoreCredentials, StoreSettings,
@@ -75,6 +76,7 @@ const ENTITIES = [
     HealthModule,
     MetricsModule,
     HomologModule,
+    DocsModule,
   ],
 })
 export class AppModule {}

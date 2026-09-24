@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LetzPay — Documentação do Conector Wake</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #5b6270;
+    --border: #e3e6ea;
+    --card: #f7f8fa;
+    --accent: #2a5bd7;
+    --code-bg: #101418;
+    --code-fg: #e6e6e6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --fg: #eef0f2;
+      --muted: #9aa3b1;
+      --border: #262b33;
+      --card: #171a20;
+      --accent: #6c93ff;
+      --code-bg: #0a0c0f;
+      --code-fg: #d9dde3;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 48px 20px 96px; }
+  header { margin-bottom: 40px; }
+  header .eyebrow { color: var(--accent); font-weight: 600; font-size: 0.85rem; letter-spacing: 0.04em; text-transform: uppercase; }
+  h1 { font-size: 1.9rem; margin: 8px 0 4px; }
+  header p.sub { color: var(--muted); margin: 0; }
+  h2 { font-size: 1.25rem; margin-top: 2.5em; border-top: 1px solid var(--border); padding-top: 1.2em; }
+  h3 { font-size: 1.05rem; margin-top: 1.6em; }
+  p, li { color: var(--fg); }
+  ul, ol { padding-left: 1.3em; }
+  code {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-size: 0.9em;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+  }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1em 0; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 0.92rem; }
+  th { color: var(--muted); font-weight: 600; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin: 1em 0;
+  }
+  .card.note::before { content: "Nota"; display: block; font-weight: 600; color: var(--accent); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 4px; }
+  footer { margin-top: 4em; padding-top: 1.5em; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.9rem; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">LetzTech · Documentação Funcional</div>
+    <h1>Conector LetzPay para Wake Commerce</h1>
+    <p class="sub">Guia de configuração e funcionamento do conector de pagamentos LetzPay dentro da plataforma Wake.</p>
+  </header>
+
+  <section>
+    <h2>Visão geral</h2>
+    <p>
+      O LetzPay é o conector de pagamentos da LetzTech para lojas Wake Commerce. Ele processa
+      pagamentos via <strong>Cartão de Crédito</strong>, <strong>Pix</strong> e <strong>Boleto</strong>,
+      com suporte opcional a análise antifraude por loja.
+    </p>
+  </section>
+
+  <section>
+    <h2>Configuração na Wake</h2>
+    <p>Ao habilitar o conector LetzPay na sua loja Wake, você vai precisar de duas informações,
+      fornecidas pela LetzTech na criação (ou rotação) das credenciais da sua loja:</p>
+    <table>
+      <tr><th>Campo</th><th>Descrição</th></tr>
+      <tr><td><code>x-letztech-store</code></td><td>Identificador (slug) da sua loja no LetzTech Gateway.</td></tr>
+      <tr><td><code>x-letztech-key</code></td><td>Chave de API da loja. É exibida em texto puro apenas uma vez — guarde-a com segurança.</td></tr>
+    </table>
+    <div class="card note">
+      Perdeu a chave de API? Entre em contato com o suporte LetzTech para gerar uma nova — a
+      anterior é revogada automaticamente.
+    </div>
+  </section>
+
+  <section>
+    <h2>Métodos de pagamento</h2>
+    <h3>Cartão de crédito</h3>
+    <p>
+      O cartão é sempre processado em duas etapas: <strong>autorização</strong> no momento da
+      compra e <strong>captura</strong> quando o pedido é confirmado/aprovado na Wake (inclusive
+      após uma eventual análise antifraude). Parcelamento é repassado conforme informado pela
+      Wake, sem regras adicionais do conector.
+    </p>
+    <h3>Pix</h3>
+    <p>
+      Gera QR Code e código copia-e-cola instantaneamente. As informações ficam disponíveis tanto
+      no admin do pedido quanto na área "Minha Conta" do comprador.
+    </p>
+    <h3>Boleto</h3>
+    <p>
+      Gera boleto com linha digitável e link para segunda via, também disponíveis no admin do
+      pedido e em "Minha Conta".
+    </p>
+  </section>
+
+  <section>
+    <h2>Cancelamento e estorno</h2>
+    <ul>
+      <li><strong>Pedido apenas autorizado (ainda não capturado):</strong> o cancelamento libera a
+        autorização sem cobrança.</li>
+      <li><strong>Pedido já capturado/pago:</strong> o cancelamento realiza estorno, total ou
+        parcial, conforme o valor informado.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Troca de forma de pagamento</h2>
+    <p>
+      Se o comprador trocar a forma de pagamento de um pedido, a nova tentativa é processada
+      normalmente pelo conector — o pedido permanece o mesmo, com uma nova cobrança associada.
+    </p>
+  </section>
+
+  <section>
+    <h2>Antifraude (opcional)</h2>
+    <p>
+      Lojas podem habilitar análise antifraude por transação. Quando ativa, pedidos podem ser
+      aprovados automaticamente, recusados ou colocados em análise manual antes da autorização
+      seguir adiante — o status refletido no pedido Wake acompanha o resultado da análise.
+    </p>
+  </section>
+
+  <section>
+    <h2>Retorno de identificadores</h2>
+    <p>
+      Cada transação processada retorna um identificador único, utilizado como referência de
+      TID/NSU/Autorização junto ao pedido na Wake.
+    </p>
+  </section>
+
+  <footer>
+    Dúvidas ou suporte: <a href="mailto:contato@marcoslandi.com">contato@marcoslandi.com</a>
+    <br>LetzTech — <a href="https://pay.letstech.com.br">pay.letstech.com.br</a>
+  </footer>
+</div>
+</body>
+</html>
