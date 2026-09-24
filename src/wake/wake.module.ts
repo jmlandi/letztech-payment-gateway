@@ -11,5 +11,6 @@ import { IdempotencyModule } from '../idempotency/idempotency.module';
   imports: [PaymentsModule, StoresModule, RiskModule, ProvidersModule, IdempotencyModule],
   controllers: [WakeController],
   providers: [WakeService],
+  exports: [WakeService],
 })
 export class WakeModule {}

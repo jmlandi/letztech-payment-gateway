@@ -225,7 +225,14 @@ export class PaymentsService {
   }
 
   async findById(id: string, storeId: string): Promise<Payment> {
-    const payment = await this.paymentRepo.findOne({ where: { id, storeId }, relations: ['events'] });
+    // providerCharges is required here, not just events: handleCapture/handleCancel
+    // read payment.providerCharges.at(-1) to find the charge to act on, and
+    // TypeORM leaves unrequested relations undefined rather than [].
+    const payment = await this.paymentRepo.findOne({
+      where: { id, storeId },
+      relations: ['events', 'providerCharges'],
+      order: { providerCharges: { createdAt: 'ASC' } },
+    });
     if (!payment) throw new NotFoundException({ error: { code: 'not_found', message: 'Payment not found' } });
     return payment;
   }

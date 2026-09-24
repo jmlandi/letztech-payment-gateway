@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ZoopPaymentAdapter, ZoopSeller } from './zoop/zoop-payment.adapter';
+import { FAKE_ZOOP_SELLER_ID, FakeZoopProvider } from './zoop/fake-zoop.provider';
 import { PaymentProvider } from '../domain/interfaces/payment-provider.interface';
 import { StoreSettings } from '../stores/entities/store-settings.entity';
 
 @Injectable()
 export class ProvidersService {
   private readonly marketplaceAdapter: ZoopPaymentAdapter;
+  private readonly fakeAdapter = new FakeZoopProvider();
 
   constructor(config: ConfigService) {
     this.marketplaceAdapter = new ZoopPaymentAdapter({
@@ -19,7 +21,8 @@ export class ProvidersService {
     });
   }
 
-  getPaymentProvider(_settings: StoreSettings): PaymentProvider {
+  getPaymentProvider(settings: StoreSettings): PaymentProvider {
+    if (settings.zoopSellerId === FAKE_ZOOP_SELLER_ID) return this.fakeAdapter;
     return this.marketplaceAdapter;
   }
 

@@ -8,6 +8,7 @@ import { StoreSettings } from './entities/store-settings.entity';
 import { generateId } from '../common/utils/id';
 import { slugify } from '../common/utils/slug';
 import { ProvidersService } from '../providers/providers.service';
+import { FAKE_ZOOP_SELLER_ID } from '../providers/zoop/fake-zoop.provider';
 import { RiskService } from '../risk/risk.service';
 
 export interface ResolvedStore {
@@ -45,6 +46,12 @@ export class StoresService {
 
     const settings = await this.settingsRepo.findOneOrFail({ where: { storeId: store.id } });
     return { store, settings };
+  }
+
+  /** Internal lookup by Wake slug, without the API key check resolveByWakeHeaders
+   * does -- for callers that already operate at admin trust level. */
+  async findByWakeStoreHeader(wakeStoreHeader: string): Promise<Store | null> {
+    return this.storeRepo.findOne({ where: { wakeStoreHeader } });
   }
 
   async resolveByApiKey(bearerKey: string): Promise<ResolvedStore> {
@@ -88,7 +95,9 @@ export class StoresService {
 
     await this.assertNameAvailable(name);
     await this.assertSlugAvailable(wakeStoreHeader);
-    if (zoopSellerId) await this.assertSellerExists(zoopSellerId);
+    // FAKE_ZOOP_SELLER_ID never exists on the real Zoop marketplace by design
+    // (see FakeZoopProvider) -- skip the live check for it.
+    if (zoopSellerId && zoopSellerId !== FAKE_ZOOP_SELLER_ID) await this.assertSellerExists(zoopSellerId);
 
     const store = this.storeRepo.create({ id: generateId('str'), name, wakeStoreHeader });
     await this.storeRepo.save(store);
@@ -115,6 +124,34 @@ export class StoresService {
     await this.settingsRepo.save(settings);
 
     return { store, apiKey, hmacSecret };
+  }
+
+  /** Issues a fresh API key for a store and revokes its previous credentials.
+   * Needed because the plaintext key is only ever returned once, at
+   * creation -- this is the recovery path when it's been lost. */
+  async rotateCredentials(storeId: string): Promise<{ apiKey: string; hmacSecret: string }> {
+    await this.findById(storeId);
+
+    const apiKey = generateId('key');
+    const hmacSecret = generateId('sec');
+    const creds = this.credsRepo.create({
+      id: generateId('crd'),
+      storeId,
+      apiKeyHash: await argon2.hash(apiKey),
+      hmacSecretHash: await argon2.hash(hmacSecret),
+    });
+    await this.credsRepo.save(creds);
+
+    await this.credsRepo
+      .createQueryBuilder()
+      .update(StoreCredentials)
+      .set({ revokedAt: new Date() })
+      .where('store_id = :storeId', { storeId })
+      .andWhere('id != :id', { id: creds.id })
+      .andWhere('revoked_at IS NULL')
+      .execute();
+
+    return { apiKey, hmacSecret };
   }
 
   async updateSettings(storeId: string, patch: UpdateStoreSettingsInput): Promise<StoreSettings> {
