@@ -3,29 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LetzPay — Documentação do Conector Wake</title>
+<title>Letztech: Documentação do Conector Wake</title>
 <style>
   :root {
     color-scheme: light dark;
-    --bg: #ffffff;
-    --fg: #1a1a1a;
-    --muted: #5b6270;
-    --border: #e3e6ea;
-    --card: #f7f8fa;
-    --accent: #2a5bd7;
-    --code-bg: #101418;
-    --code-fg: #e6e6e6;
+    --bg: #f8fafc;
+    --fg: #020617;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --card: #ffffff;
+    --accent: #ed672f;
+    --accent-foreground: #ffffff;
+    --code-bg: #0f172a;
+    --code-fg: #e2e8f0;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0f1115;
-      --fg: #eef0f2;
-      --muted: #9aa3b1;
-      --border: #262b33;
-      --card: #171a20;
-      --accent: #6c93ff;
-      --code-bg: #0a0c0f;
-      --code-fg: #d9dde3;
+      --bg: #0f172a;
+      --fg: #f8fafc;
+      --muted: #94a3b8;
+      --border: #334155;
+      --card: #222735;
+      --accent: #ed672f;
+      --accent-foreground: #0f172a;
+      --code-bg: #020617;
+      --code-fg: #e2e8f0;
     }
   }
   * { box-sizing: border-box; }
@@ -71,38 +73,39 @@
     margin: 1em 0;
   }
   .card.note::before { content: "Nota"; display: block; font-weight: 600; color: var(--accent); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 4px; }
-  footer { margin-top: 4em; padding-top: 1.5em; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.9rem; }
+  footer { margin-top: 4em; padding-top: 1.5em; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; }
+  footer p { margin: 0.3em 0; }
   a { color: var(--accent); }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="eyebrow">LetzTech · Documentação Funcional</div>
-    <h1>Conector LetzPay para Wake Commerce</h1>
-    <p class="sub">Guia de configuração e funcionamento do conector de pagamentos LetzPay dentro da plataforma Wake.</p>
+    <div class="eyebrow">Letztech &middot; Documentação Funcional</div>
+    <h1>Conector Letztech para Wake Commerce</h1>
+    <p class="sub">Guia de configuração e funcionamento do conector de pagamentos Letztech dentro da plataforma Wake.</p>
   </header>
 
   <section>
     <h2>Visão geral</h2>
     <p>
-      O LetzPay é o conector de pagamentos da LetzTech para lojas Wake Commerce. Ele processa
-      pagamentos via <strong>Cartão de Crédito</strong>, <strong>Pix</strong> e <strong>Boleto</strong>,
-      com suporte opcional a análise antifraude por loja.
+      A Letztech é o gateway de pagamentos que processa as transações da sua loja Wake Commerce via
+      <strong>Cartão de Crédito</strong>, <strong>Pix</strong> e <strong>Boleto</strong>, com suporte
+      opcional a análise antifraude por loja.
     </p>
   </section>
 
   <section>
     <h2>Configuração na Wake</h2>
-    <p>Ao habilitar o conector LetzPay na sua loja Wake, você vai precisar de duas informações,
-      fornecidas pela LetzTech na criação (ou rotação) das credenciais da sua loja:</p>
+    <p>Ao habilitar o conector Letztech na sua loja Wake, você vai precisar de duas informações,
+      fornecidas pela Letztech na criação (ou rotação) das credenciais da sua loja:</p>
     <table>
       <tr><th>Campo</th><th>Descrição</th></tr>
-      <tr><td><code>x-letztech-store</code></td><td>Identificador (slug) da sua loja no LetzTech Gateway.</td></tr>
-      <tr><td><code>x-letztech-key</code></td><td>Chave de API da loja. É exibida em texto puro apenas uma vez — guarde-a com segurança.</td></tr>
+      <tr><td><code>x-letztech-store</code></td><td>Identificador (slug) da sua loja no Letztech Gateway.</td></tr>
+      <tr><td><code>x-letztech-key</code></td><td>Chave de API da loja, exibida em texto puro apenas uma vez. Guarde-a com segurança.</td></tr>
     </table>
     <div class="card note">
-      Perdeu a chave de API? Entre em contato com o suporte LetzTech para gerar uma nova — a
+      Perdeu a chave de API? Entre em contato com o suporte Letztech para gerar uma nova; a
       anterior é revogada automaticamente.
     </div>
   </section>
@@ -118,7 +121,7 @@
     </p>
     <h3>Pix</h3>
     <p>
-      Gera QR Code e código copia-e-cola instantaneamente. As informações ficam disponíveis tanto
+      Gera QR Code e código copia e cola instantaneamente. As informações ficam disponíveis tanto
       no admin do pedido quanto na área "Minha Conta" do comprador.
     </p>
     <h3>Boleto</h3>
@@ -142,7 +145,7 @@
     <h2>Troca de forma de pagamento</h2>
     <p>
       Se o comprador trocar a forma de pagamento de um pedido, a nova tentativa é processada
-      normalmente pelo conector — o pedido permanece o mesmo, com uma nova cobrança associada.
+      normalmente pelo conector. O pedido permanece o mesmo, com uma nova cobrança associada.
     </p>
   </section>
 
@@ -151,7 +154,7 @@
     <p>
       Lojas podem habilitar análise antifraude por transação. Quando ativa, pedidos podem ser
       aprovados automaticamente, recusados ou colocados em análise manual antes da autorização
-      seguir adiante — o status refletido no pedido Wake acompanha o resultado da análise.
+      seguir adiante. O status refletido no pedido Wake acompanha o resultado da análise.
     </p>
   </section>
 
@@ -164,8 +167,9 @@
   </section>
 
   <footer>
-    Dúvidas ou suporte: <a href="mailto:contato@marcoslandi.com">contato@marcoslandi.com</a>
-    <br>LetzTech — <a href="https://pay.letstech.com.br">pay.letstech.com.br</a>
+    <p>LETZTECH TECNOLOGIA E PAGAMENTOS LTDA &middot; CNPJ 38.211.947/0001-14</p>
+    <p>Suporte: <a href="mailto:contato@marcoslandi.com">contato@marcoslandi.com</a> &middot; +55 16 99277-2621</p>
+    <p><a href="https://letztech.com.br">letztech.com.br</a> &middot; <a href="https://pay.letstech.com.br">pay.letstech.com.br</a></p>
   </footer>
 </div>
 </body>
